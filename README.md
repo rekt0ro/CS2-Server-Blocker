@@ -1,4 +1,4 @@
-# Linux script for blocking CS2 Server IPs
+# Block CS2 Server IPs on Linux
 
 Block unwanted Counter-Strike 2 servers by region using your Linux firewall — no matter which one you use.  
 Supports **UFW**, **iptables**, **nftables**, and **firewalld**.
@@ -11,7 +11,6 @@ Supports **UFW**, **iptables**, **nftables**, and **firewalld**.
 - 🌍 Pulls live server IPs from Valve’s official API
 - 🔥 Works with multiple firewall systems — auto-detects and adapts
 - 🧼 Unblocks cleanly when re-run
-- 🐧 Designed for Linux gamers who want better matchmaking control
 
 ---
 
@@ -34,15 +33,12 @@ For parsing JSON.
 🐧 Fedora
 
     sudo dnf install curl jq
-🐧 openSUSE
-
-    sudo zypper install curl jq
 
 ---
 
 ## 🎯 Usage
 
-Download script and make it executable:
+Download the script and make it executable:
 
     chmod +x Block.sh
 Now run it like this for example:
