@@ -43,7 +43,7 @@ Block unwanted regions:
 Download Block.sh and make it executable:
 
     chmod +x Block.sh
----
+Now run it like this for example:
 
     ./Block.sh dxb bom2
 
