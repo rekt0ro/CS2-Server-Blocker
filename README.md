@@ -25,13 +25,17 @@ For fetching server data from Valve.
     jq
 For parsing JSON.
 
-# 🐧 Arch
+🐧 Arch
+ 
     sudo pacman -S curl jq
-# 🐧 Debian
+🐧 Debian
+
     sudo apt install curl jq
-# 🐧 Fedora
+🐧 Fedora
+
     sudo dnf install curl jq
-# 🐧 openSUSE
+🐧 openSUSE
+
     sudo zypper install curl jq
 
 ---
