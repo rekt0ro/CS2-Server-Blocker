@@ -38,8 +38,6 @@ For parsing JSON.
 
 ## 🎯 Usage
 
-Block unwanted regions:
-
 Download Block.sh and make it executable:
 
     chmod +x Block.sh
