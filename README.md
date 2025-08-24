@@ -38,7 +38,7 @@ For parsing JSON.
 
 ## 🎯 Usage
 
-Download Block.sh and make it executable:
+Download "Script File" and make it executable:
 
     chmod +x Block.sh
 Now run it like this for example:
