@@ -42,7 +42,7 @@ Block unwanted regions:
 
 Download Block.sh and make it executable:
 
-    chmod +x cs2_block_multi.sh
+    chmod +x Block.sh
 
     ./Block.sh dxb bom2
 Replace dxb bom2 with any PoP codes you want to block.
