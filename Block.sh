@@ -1,18 +1,56 @@
 #!/bin/bash
-# Blocks inbound/outbound UDP traffic to selected CS2 server PoPs
 
 API_ENDPOINT="https://api.steampowered.com/ISteamApps/GetSDRConfig/v1/?appid=730"
 BLOCK_FILE="blocked-ips.txt"
+TMP_DATA="/tmp/cs2_data.json"
 
-# Check dependencies
-for dep in curl jq; do
-  if ! command -v "$dep" >/dev/null 2>&1; then
-    echo "Missing dependency: $dep"
-    exit 1
+# 🎨 Terminal colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m' # No Color
+
+# 🌀 Spinner
+spinner() {
+  local pid=$!
+  local delay=0.1
+  local spinstr='|/-\'
+  while ps -p $pid >/dev/null 2>&1; do
+    local temp=${spinstr#?}
+    printf " [%c]  " "$spinstr"
+    spinstr=$temp${spinstr%"$temp"}
+    sleep $delay
+    printf "\b\b\b\b\b\b"
+  done
+}
+
+# 🖼️ Banner
+print_banner() {
+  echo
+  if command -v figlet >/dev/null; then
+    figlet -c "CS2 PoP Blocker"
+  elif command -v toilet >/dev/null; then
+    toilet -f mono12 -F metal "CS2 PoP Blocker"
+  else
+    echo -e "${BOLD}${BLUE}=== CS2 PoP Blocker ===${NC}"
   fi
-done
+  echo
+}
 
-# Detect active firewall
+# 🔍 Check dependencies
+check_dependencies() {
+  for dep in curl jq column; do
+    if ! command -v "$dep" >/dev/null 2>&1; then
+      echo -e "${RED}❌ Missing dependency: ${dep}${NC}"
+      exit 1
+    fi
+  done
+}
+
+# 🔥 Detect active firewall
 detect_firewall() {
   if command -v ufw >/dev/null && sudo ufw status >/dev/null 2>&1; then
     echo "ufw"
@@ -27,41 +65,41 @@ detect_firewall() {
   fi
 }
 
-# Fetch and validate JSON
+# 🌐 Fetch and validate JSON
 fetch_data() {
-  local raw
-  raw=$(curl -s "$API_ENDPOINT")
-  if ! jq empty <<<"$raw" 2>/dev/null; then
-    echo "Error: Invalid JSON from Valve API"
+  curl -s "$API_ENDPOINT" > "$TMP_DATA"
+  if ! jq empty < "$TMP_DATA" 2>/dev/null; then
+    echo -e "${RED}❌ Error: Invalid JSON from Valve API${NC}"
     return 1
   fi
-  jq 'del(.success, .certs, .p2p_share_ip, .relay_public_key, .revoked_keys, .typical_pings)' <<< "$raw"
+  jq 'del(.success, .certs, .p2p_share_ip, .relay_public_key, .revoked_keys, .typical_pings)' "$TMP_DATA" > "$TMP_DATA.cleaned"
+  mv "$TMP_DATA.cleaned" "$TMP_DATA"
 }
 
-# List available PoPs
+# 📍 List available PoPs
 parse_countries() {
-  jq -r '.pops | keys[]' <<< "$1"
+  jq -r '.pops | keys[]' < "$TMP_DATA"
 }
 
-# Get IPs for a PoP
+# 📡 Get IPs for a PoP
 get_ips_by_country() {
-  jq -r ".pops[\"$1\"].relays[].ipv4" <<< "$2"
+  jq -r ".pops[\"$1\"].relays[].ipv4" < "$TMP_DATA"
 }
 
-# Save IPs to file
+# 💾 Save IPs to file
 save_blocked_ips() {
-  local data="$1"; shift
   local countries=("$@")
   > "$BLOCK_FILE"
   for country in "${countries[@]}"; do
-    mapfile -t ips < <(get_ips_by_country "$country" "$data")
+    mapfile -t ips < <(get_ips_by_country "$country")
     printf "%s\n" "${ips[@]}" >> "$BLOCK_FILE"
   done
 }
 
-# Apply block rules
+# 🛡️ Apply block rules
 block_ip() {
   local ip="$1" fw="$2"
+  echo -e "${YELLOW}🔒 Blocking ${ip}...${NC}"
   case "$fw" in
     ufw)
       sudo ufw deny out to "$ip" proto udp
@@ -82,9 +120,10 @@ block_ip() {
   esac
 }
 
-# Remove block rules
+# 🔓 Remove block rules
 unblock_ip() {
   local ip="$1" fw="$2"
+  echo -e "${CYAN}🔓 Unblocking ${ip}...${NC}"
   case "$fw" in
     ufw)
       sudo ufw delete deny out to "$ip" proto udp >/dev/null 2>&1
@@ -105,45 +144,68 @@ unblock_ip() {
   esac
 }
 
-# Main logic
+# 🚀 Main logic
 main() {
+  print_banner
+  check_dependencies
+
+  echo -e "${BOLD}${BLUE}🔍 Detecting firewall...${NC}"
   local fw=$(detect_firewall)
   if [[ "$fw" == "none" ]]; then
-    echo "No supported firewall detected. Exiting."
+    echo -e "${RED}❌ No supported firewall detected. Exiting.${NC}"
     exit 1
   fi
+  echo -e "${GREEN}✅ Detected firewall: ${fw}${NC}"
 
-  echo "Detected firewall: $fw"
+  if [[ "$1" == "--unblock" ]]; then
+    if [[ -f "$BLOCK_FILE" ]]; then
+      echo -e "${CYAN}🧼 Unblocking all IPs...${NC}"
+      while read -r ip; do
+        unblock_ip "$ip" "$fw"
+      done < "$BLOCK_FILE"
+      rm -f "$BLOCK_FILE"
+      echo -e "${GREEN}✅ All IPs unblocked.${NC}"
+    else
+      echo -e "${YELLOW}⚠️ No blocked IPs found.${NC}"
+    fi
+    exit 0
+  fi
 
   if [[ -f "$BLOCK_FILE" ]]; then
-    echo "Unblocking previously blocked IPs..."
+    echo -e "${CYAN}🧹 Cleaning up previous blocks...${NC}"
     while read -r ip; do
       unblock_ip "$ip" "$fw"
     done < "$BLOCK_FILE"
     rm -f "$BLOCK_FILE"
-    echo "Unblocked."
+    echo -e "${GREEN}✅ Unblocked previous IPs.${NC}"
   fi
 
-  local data
-  if ! data=$(fetch_data); then
-    exit 1
-  fi
+  echo -ne "${BLUE}🌐 Fetching server data...${NC}"
+  fetch_data & spinner
+  wait
+  echo -e "\n${GREEN}✅ Data fetched.${NC}"
 
-  echo "Available PoPs:"
-  parse_countries "$data"
+  echo -e "${YELLOW}📍 Available PoPs:${NC}"
+  parse_countries
 
   if [[ $# -gt 0 ]]; then
-    save_blocked_ips "$data" "$@"
+    save_blocked_ips "$@"
   else
-    read -p "Enter PoP codes to block (space-separated): " -a countries
-    save_blocked_ips "$data" "${countries[@]}"
+    echo -ne "${BOLD}Enter PoP codes to block (space-separated):${NC} "
+    read -a countries
+    save_blocked_ips "${countries[@]}"
   fi
 
-  echo "Blocking IPs..."
+  echo -e "${BLUE}🚫 Blocking IPs...${NC}"
   while read -r ip; do
     block_ip "$ip" "$fw"
   done < "$BLOCK_FILE"
-  echo "Done."
+
+  echo -e "${BOLD}${CYAN}📊 Blocked IPs Summary:${NC}"
+  column -t "$BLOCK_FILE"
+
+  echo -e "${GREEN}✅ Done.${NC}"
+  rm -f "$TMP_DATA"
 }
 
 main "$@"
