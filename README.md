@@ -13,9 +13,11 @@
    Replace `dxb bom2` with any PoP codes from the list that you want to block.  
    The script will fetch IPs and apply firewall rules automatically.
 
-3. Unblock all IPs:  
-   Re-run the script and press `Ctrl+C` when prompted for PoPs.  
-   Previously blocked IPs will be removed.
+3. Unblock:
+
+   ```bash
+   ./Block.sh --unblock
+   ```
 
 ## PoP Codes
 
