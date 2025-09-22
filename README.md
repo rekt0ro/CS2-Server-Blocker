@@ -6,14 +6,11 @@
    ./Block.sh
    ```
 
-2. Block PoPs (datacenters):  
-   ```bash
-   ./Block.sh dxb bom2
-   ```  
-   Replace `dxb bom2` with any PoP codes from the list that you want to block.  
-   The script will fetch IPs and apply firewall rules automatically.
+2. Enter PoP codes shown under "Available PoPs".
 
-3. Unblock:
+   Script fetches IPs and applies UDP block rules automatically.
+
+4. Unblock:
 
    ```bash
    ./Block.sh --unblock
