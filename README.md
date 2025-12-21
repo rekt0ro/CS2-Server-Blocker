@@ -10,7 +10,9 @@
 
    Script fetches IPs and applies UDP block rules automatically.
 
-4. Unblock:
+   **Do not delete the "blocked-ips.txt" file, otherwise the unblock command will not work.**
+
+3. Unblock:
 
    ```bash
    ./Block.sh --unblock
