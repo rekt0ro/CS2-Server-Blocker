@@ -64,6 +64,15 @@ detect_firewall(){
   fi
 }
 
+get_firewalld_zone(){
+  local zone
+  zone=$(sudo firewall-cmd --get-active-zones 2>/dev/null | awk 'NR==1{print $1}')
+  if [[ -z "$zone" ]]; then
+    zone="public"
+  fi
+  printf '%s' "$zone"
+}
+
 fetch_data(){
   if ! curl -s --fail "$API_ENDPOINT" -o "$TMP_DATA"; then
     echo -e "${RED}Failed to fetch Valve data${NC}" >&2
@@ -118,15 +127,16 @@ save_blocked_ips(){
 }
 
 block_ip(){
-  local ip="$1" fw="$2"
+  local ip="$1" fw="$2" zone="$3"
   case "$fw" in
     ufw)
       sudo ufw deny out to "$ip" proto udp >/dev/null 2>&1 || true
       sudo ufw deny from "$ip" proto udp >/dev/null 2>&1 || true
       ;;
     firewalld)
-      sudo firewall-cmd --permanent --add-rich-rule="rule family='ipv4' source address='$ip' protocol='udp' drop" >/dev/null 2>&1 || true
-      sudo firewall-cmd --permanent --add-rich-rule="rule family='ipv4' destination address='$ip' protocol='udp' drop" >/dev/null 2>&1 || true
+      sudo firewall-cmd --permanent --direct --add-rule ipv4 filter OUTPUT 0 -d "$ip" -p udp -j DROP >/dev/null 2>&1 || true
+      sudo firewall-cmd --permanent --direct --add-rule ipv4 filter INPUT  0 -s "$ip" -p udp -j DROP >/dev/null 2>&1 || true
+      sudo firewall-cmd --permanent --direct --add-rule ipv4 filter OUTPUT 0 -d "$ip" -p udp --dport 27015:27050 -j DROP >/dev/null 2>&1 || true
       ;;
     nftables)
       sudo nft add rule inet filter input ip saddr "$ip" udp drop >/dev/null 2>&1 || true
@@ -142,15 +152,16 @@ block_ip(){
 }
 
 unblock_ip(){
-  local ip="$1" fw="$2"
+  local ip="$1" fw="$2" zone="$3"
   case "$fw" in
     ufw)
       sudo ufw delete deny out to "$ip" proto udp >/dev/null 2>&1 || true
       sudo ufw delete deny from "$ip" proto udp >/dev/null 2>&1 || true
       ;;
     firewalld)
-      sudo firewall-cmd --permanent --remove-rich-rule="rule family='ipv4' source address='$ip' protocol='udp' drop" >/dev/null 2>&1 || true
-      sudo firewall-cmd --permanent --remove-rich-rule="rule family='ipv4' destination address='$ip' protocol='udp' drop" >/dev/null 2>&1 || true
+      sudo firewall-cmd --permanent --direct --remove-rule ipv4 filter OUTPUT 0 -d "$ip" -p udp -j DROP >/dev/null 2>&1 || true
+      sudo firewall-cmd --permanent --direct --remove-rule ipv4 filter INPUT  0 -s "$ip" -p udp -j DROP >/dev/null 2>&1 || true
+      sudo firewall-cmd --permanent --direct --remove-rule ipv4 filter OUTPUT 0 -d "$ip" -p udp --dport 27015:27050 -j DROP >/dev/null 2>&1 || true
       ;;
     nftables)
       sudo nft delete rule inet filter input ip saddr "$ip" udp drop >/dev/null 2>&1 || true
@@ -176,7 +187,7 @@ progress_bar(){
 }
 
 unblock_all_and_exit(){
-  local fw="$1"
+  local fw="$1" zone="$2"
   if [[ ! -f "$BLOCK_FILE" || ! -s "$BLOCK_FILE" ]]; then
     echo -e "${YELLOW}No blocked IPs file found (${BLOCK_FILE}). Nothing to do.${NC}"
     exit 0
@@ -184,12 +195,19 @@ unblock_all_and_exit(){
   echo -e "${BOLD}Unblocking all IPs from ${BLOCK_FILE}...${NC}"
   while IFS= read -r ip; do
     [[ -z "$ip" ]] && continue
-    unblock_ip "$ip" "$fw"
+    unblock_ip "$ip" "$fw" "$zone"
     echo -e "  ${GREEN}✓${NC} Unblocked ${ip}"
   done < "$BLOCK_FILE"
   rm -f "$BLOCK_FILE"
+  if [[ "$fw" == "firewalld" ]]; then
+    sudo firewall-cmd --reload >/dev/null 2>&1 || true
+  fi
   echo -e "${GREEN}All entries removed and firewall rules cleaned.${NC}"
   exit 0
+}
+
+show_firewalld_direct_rules(){
+  sudo firewall-cmd --direct --get-all-rules || true
 }
 
 main(){
@@ -206,8 +224,15 @@ main(){
   echo -e "${GREEN}Detected firewall:${NC} ${BOLD}$fw${NC}"
   echo
 
+  local fw_zone=""
+  if [[ "$fw" == "firewalld" ]]; then
+    fw_zone=$(get_firewalld_zone)
+    echo -e "${BLUE}Using firewalld zone:${NC} ${BOLD}$fw_zone${NC}"
+    echo
+  fi
+
   if [[ "${1:-}" == "--unblock" ]]; then
-    unblock_all_and_exit "$fw"
+    unblock_all_and_exit "$fw" "$fw_zone"
   fi
 
   echo -ne "${CYAN}Fetching server data...${NC}"
@@ -250,17 +275,22 @@ main(){
 
   while IFS= read -r ip; do
     [[ -z "$ip" ]] && printf "\n" || {
-      block_ip "$ip" "$fw"
+      block_ip "$ip" "$fw" "$fw_zone"
       printf "%s\n" "$ip"
     }
   done < "$BLOCK_FILE" > /proc/$$/fd/1 || {
     while IFS= read -r ip; do
-      block_ip "$ip" "$fw"
+      block_ip "$ip" "$fw" "$fw_zone"
       printf "%s\n" "$ip"
     done < "$BLOCK_FILE"
   }
 
   wait "$pb_pid" 2>/dev/null || true
+
+  if [[ "$fw" == "firewalld" ]]; then
+    sudo firewall-cmd --reload >/dev/null 2>&1 || true
+    echo -e "${DIM}You can verify direct rules with:${NC} sudo firewall-cmd --direct --get-all-rules"
+  fi
 
   echo -e "\n${GREEN}Done.${NC} Blocked ${CYAN}$total_ips${NC} IPs from ${CYAN}${#picks[@]}${NC} PoP(s)."
   echo
