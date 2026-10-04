@@ -1,0 +1,63 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libxcb-render0-dev \
+            libxcb-shape0-dev \
+            libxcb-xfixes0-dev \
+            libxkbcommon-dev \
+            libssl-dev
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - name: Package Linux release
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf dist release
+          mkdir -p dist release
+
+          install -m 755 target/release/cs2-server-blocker-gui dist/cs2-server-blocker
+          install -m 644 packaging/linux/cs2-server-blocker.desktop dist/cs2-server-blocker.desktop
+          install -m 644 packaging/linux/cs2-server-blocker.svg dist/cs2-server-blocker.svg
+
+          tar -C dist -czf release/cs2-server-blocker-x86_64-linux.tar.gz \
+            cs2-server-blocker \
+            cs2-server-blocker.desktop \
+            cs2-server-blocker.svg
+
+      - name: Publish GitHub release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: release/cs2-server-blocker-x86_64-linux.tar.gz
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cs2-server-blocker-x86_64-linux
+          path: release/cs2-server-blocker-x86_64-linux.tar.gz
