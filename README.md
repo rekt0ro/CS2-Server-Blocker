@@ -9,7 +9,7 @@ A native Linux GUI for blocking Counter-Strike 2 Steam SDR relay regions.
 Install the latest release with one command:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/rekt0ro/CS2-Server-Blocker/main/install.sh)
+curl -fsSL https://raw.githubusercontent.com/rekt0ro/CS2-Server-Blocker/main/install.sh | bash
 ```
 
 The installer adds **CS2 Server Blocker** to your desktop application menu.
@@ -17,7 +17,7 @@ The installer adds **CS2 Server Blocker** to your desktop application menu.
 ### Uninstall
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/rekt0ro/CS2-Server-Blocker/main/uninstall.sh)
+curl -fsSL https://raw.githubusercontent.com/rekt0ro/CS2-Server-Blocker/main/uninstall.sh | bash
 ```
 
 ## Features
