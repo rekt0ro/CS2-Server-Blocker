@@ -1,51 +1,52 @@
-## Usage
+# CS2 Server Blocker
 
-1. Make the script executable and run it:  
-   ```bash
-   chmod +x Block.sh
-   ./Block.sh
-   ```
+Native Linux GUI for blocking Counter-Strike 2 Steam SDR relay PoPs by region.
 
-2. Enter PoP codes shown under "Available PoPs".
+The application fetches the current Steam SDR relay list, lets you select server regions by country, and applies UDP firewall blocks through the detected firewall backend.
 
-   Script fetches IPs and applies UDP block rules automatically.
+## Install
 
-   **Do not delete the "blocked-ips.txt" file, otherwise the unblock command will not work.**
+On a supported x86_64 Linux system:
 
-3. Unblock:
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/rekt0ro/CS2-Server-Blocker/main/install.sh)
+```
 
-   ```bash
-   ./Block.sh --unblock
-   ```
+The installer downloads the latest GitHub Release, installs the application to /usr/local/bin/, and adds it to the desktop application menu.
 
-## PoP Codes
+To remove the application:
 
-- `hkg` → Hong Kong  
-- `iad` → Washington, D.C.  
-- `lax` → Los Angeles  
-- `lhr` → London  
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/rekt0ro/CS2-Server-Blocker/main/uninstall.sh)
+```
 
-<details>
-  <summary>View More</summary>
+The uninstaller does not remove your saved application state or firewall rules.
 
-- `ams` → Amsterdam  
-- `bom2` → Mumbai  
-- `dxb` → Dubai  
-- `fra` → Frankfurt  
-- `mad` → Madrid  
-- `man` → Manchester  
-- `mrs` → Marseille  
-- `osl` → Oslo  
-- `par` → Paris  
-- `scl` → Santiago  
-- `sea` → Seattle  
-- `sgp` → Singapore  
-- `sto` → Stockholm  
-- `syd` → Sydney  
-- `tsn` → Tianjin  
-- `vie` → Vienna  
-- `waw` → Warsaw  
+## Features
 
-</details>
+- Select individual Steam SDR PoPs or whole country groups.
+- Block selected regions.
+- Unblock selected regions.
+- Unblock all regions managed by the application.
+- Search the relay list by country, location, or PoP code.
+- Scroll through the complete relay list.
+- Supports UFW, firewalld, nftables, and iptables.
+- Uses pkexec for privileged firewall operations when the application is not already running as root.
+- Stores application state under ~/.local/state/cs2-server-blocker/state.json.
 
-**Note:** Valve updates its server IPs from time to time. To keep your selected servers blocked, re-run the script occasionally to fetch the latest IPs and refresh the firewall rules.
+## Building from source
+
+Requirements include Rust and the native Linux development libraries used by eframe.
+
+```bash
+cargo build --release
+cargo run --release
+```
+
+The release workflow builds the x86_64 Linux package and publishes it automatically when a version tag such as v0.3.0 is pushed.
+
+## Firewall note
+
+The application only manages rules it creates for CS2 Server Blocker. Existing unrelated firewall rules are left untouched.
+
+Valve can change Steam SDR relay addresses over time, so the application refreshes the relay list from Steam when started and can refresh it again from the GUI.
