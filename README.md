@@ -36,15 +36,6 @@ CS2 Server Blocker fetches the current Steam SDR relay configuration, maps relay
 
 Firewall changes require elevated privileges. The application uses `pkexec` when needed.
 
-## Requirements
-
-- Linux
-- x86_64
-- `curl`
-- `pkexec` for privileged firewall actions
-
-The released binary is built for modern Linux systems with glibc.
-
 ## Build from source
 
 ```bash
