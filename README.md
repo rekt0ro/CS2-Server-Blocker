@@ -53,7 +53,3 @@ git clone https://github.com/rekt0ro/CS2-Server-Blocker.git
 cd CS2-Server-Blocker
 cargo run --release
 ```
-
-## License
-
-MIT
