@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=CS2 Server Blocker
+Comment=Block Counter-Strike 2 Steam SDR relay regions
+Exec=/usr/local/bin/cs2-server-blocker
+Icon=cs2-server-blocker
+Terminal=false
+Type=Application
+Categories=Network;Utility;Game;
