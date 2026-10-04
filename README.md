@@ -12,7 +12,6 @@ Install the latest release with one command:
 curl -fsSL https://raw.githubusercontent.com/rekt0ro/CS2-Server-Blocker/main/install.sh | bash
 ```
 
-The installer adds **CS2 Server Blocker** to your desktop application menu.
 
 ### Uninstall
 
