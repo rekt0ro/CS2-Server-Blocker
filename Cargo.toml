@@ -1,0 +1,19 @@
+[package]
+name = "cs2-server-blocker-gui"
+version = "0.3.0"
+edition = "2024"
+license = "MIT"
+description = "Native Linux GUI for blocking Counter-Strike 2 Steam SDR relay PoPs."
+readme = "README.md"
+
+[dependencies]
+eframe = "0.36.2"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
+panic = "abort"
