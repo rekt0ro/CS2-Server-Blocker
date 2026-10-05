@@ -454,14 +454,7 @@ impl eframe::App for App {
                                     RichText::new("Steam SDR relay control").size(13.0).color(muted),
                                 );
                             });
-
-                            let actions_width = 270.0;
-                            ui.add_space(
-                                (ui.available_width() - actions_width)
-                                    .max(0.0),
-                            );
-                            ui.allocate_ui_with_layout(
-                                egui::vec2(actions_width, 34.0),
+                            ui.with_layout(
                                 egui::Layout::right_to_left(Align::Center),
                                 |ui| {
                                     ui.add_enabled_ui(!self.busy, |ui| {
@@ -637,14 +630,15 @@ impl eframe::App for App {
                         let groups = self.visible_country_groups();
                         let blocked_ips = self.stored.blocked_ips();
 
-                        if groups.is_empty() && self.pops.is_empty() {
+                        if groups.is_empty() {
                             ui.add_space(32.0);
                             ui.vertical_centered(|ui| {
-                                if self.busy {
-                                    ui.label(RichText::new("Loading Steam SDR regions...").strong().size(17.0).color(text));
-                                    ui.add_space(4.0);
-                                    ui.spinner();
-                                } else {
+                                ui.label(RichText::new("No matching regions").strong().size(17.0).color(text));
+                                ui.add_space(4.0);
+                                ui.label(RichText::new("Try another country, city, or PoP code.").color(muted));
+                            });
+                            ui.add_space(32.0);
+                        } else {
                                     ui.label(RichText::new("No relay data loaded").strong().size(17.0).color(text));
                                     ui.add_space(4.0);
                                     ui.label(
@@ -1720,88 +1714,61 @@ fn flag_malaysia(p: &egui::Painter, r: Rect) {
 
 fn fetch_pops() -> Result<Vec<Pop>, String> {
     let client = Client::builder()
-        .user_agent(format!("cs2-server-blocker/{}", env!("CARGO_PKG_VERSION")))
-        .timeout(std::time::Duration::from_secs(20))
+        .user_agent("cs2-server-blocker/0.3.0")
         .build()
         .map_err(|e| format!("HTTP client error: {e}"))?;
 
-    let mut last_error = None;
+    let json: Value = client
+        .get(SDR_URL)
+        .send()
+        .map_err(|e| format!("Could not reach Steam SDR API: {e}"))?
+        .error_for_status()
+        .map_err(|e| format!("Steam SDR API returned an error: {e}"))?
+        .json()
+        .map_err(|e| format!("Invalid Steam SDR JSON: {e}"))?;
 
-    for attempt in 0..3 {
-        let response = client
-            .get(SDR_URL)
-            .send()
-            .and_then(|response| response.error_for_status());
+    let pops_obj = json
+        .get("pops")
+        .and_then(Value::as_object)
+        .ok_or_else(|| "Steam SDR response does not contain a 'pops' object.".to_string())?;
 
-        match response {
-            Ok(response) => match response.json::<Value>() {
-                Ok(json) => {
-                    let pops_obj =
-                        json.get("pops").and_then(Value::as_object).ok_or_else(|| {
-                            "Steam SDR response does not contain a 'pops' object.".to_string()
-                        })?;
+    let mut pops = Vec::new();
+    for (code, pop_value) in pops_obj {
+        let relays = pop_value
+            .get("relays")
+            .and_then(Value::as_array)
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(|relay| relay.get("ipv4").and_then(Value::as_str))
+                    .filter(|ip| is_ipv4(ip))
+                    .map(ToOwned::to_owned)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
 
-                    let mut pops = Vec::new();
-                    for (code, pop_value) in pops_obj {
-                        let relays = pop_value
-                            .get("relays")
-                            .and_then(Value::as_array)
-                            .map(|items| {
-                                items
-                                    .iter()
-                                    .filter_map(|relay| relay.get("ipv4").and_then(Value::as_str))
-                                    .filter(|ip| is_ipv4(ip))
-                                    .map(ToOwned::to_owned)
-                                    .collect::<Vec<_>>()
-                            })
-                            .unwrap_or_default();
-
-                        if relays.is_empty() {
-                            continue;
-                        }
-
-                        let description = pop_value
-                            .get("desc")
-                            .and_then(Value::as_str)
-                            .map(str::trim)
-                            .filter(|value| !value.is_empty())
-                            .unwrap_or(code)
-                            .to_string();
-                        let (country, _flag) = country_for_pop(code, &description);
-                        pops.push(Pop {
-                            code: code.clone(),
-                            location: description,
-                            country,
-                            relays,
-                        });
-                    }
-
-                    if !pops.is_empty() {
-                        pops.sort_by(|a, b| {
-                            a.country.cmp(&b.country).then_with(|| a.code.cmp(&b.code))
-                        });
-                        return Ok(pops);
-                    }
-
-                    last_error = Some(
-                        "Steam SDR returned no relay entries with usable IPv4 addresses.".into(),
-                    );
-                }
-                Err(error) => {
-                    last_error = Some(format!("Invalid Steam SDR JSON: {error}"));
-                }
-            },
-            Err(error) => {
-                last_error = Some(format!("Could not reach Steam SDR API: {error}"));
-            }
+        if relays.is_empty() {
+            continue;
         }
 
-        if attempt < 2 {
-            thread::sleep(std::time::Duration::from_millis(700));
-        }
+        let description = pop_value
+            .get("desc")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or(code)
+            .to_string();
+        let (country, _flag) = country_for_pop(code, &description);
+        pops.push(Pop {
+            code: code.clone(),
+            location: description,
+            country,
+            relays,
+        });
     }
 
-    Err(last_error.unwrap_or_else(|| "Steam SDR data could not be loaded.".into()))
+    pops.sort_by(|a, b| a.country.cmp(&b.country).then_with(|| a.code.cmp(&b.code)));
+    Ok(pops)
 }
 
 fn is_ipv4(value: &str) -> bool {
