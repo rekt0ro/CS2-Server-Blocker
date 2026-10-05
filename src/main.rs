@@ -348,25 +348,51 @@ impl App {
                     || group.pops.iter().any(|pop| self.matches_search(pop))
             })
             .collect()
-    }
 
-    fn set_country_selected(&mut self, pops: &[Pop], selected: bool) {
-        for pop in pops {
-            if selected {
-                self.selected.insert(pop.code.clone());
-            } else {
-                self.selected.remove(&pop.code);
-            }
-        }
     }
+                            ui.vertical(|ui| {
+                                ui.horizontal(|ui| {
+                                    ui.label(RichText::new("CS2 Server Blocker").strong().size(20.0).color(text));
 
-    fn select_all(&mut self) {
-        self.selected = self.pops.iter().map(|pop| pop.code.clone()).collect();
-    }
+                                    let version = env!("CARGO_PKG_VERSION");
+                                    ui.label(RichText::new(format!("v{}", version)).size(11.0).color(muted));
+                                });
+                                ui.label(
+                                    RichText::new("Steam SDR relay control").size(13.0).color(muted),
+                                );
+                            });
+                            ui.with_layout(
+                                egui::Layout::right_to_left(Align::Center),
+                                |ui| {
+                                    ui.add_enabled_ui(!self.busy, |ui| {
+                                        ui.vertical_centered_justified(|ui| {
+                                            if ui
+                                                .add(egui::Button::new(
+                                                    RichText::new("Refresh Data").strong(),
+                                                ))
+                                                .clicked()
+                                            {
+                                                self.start_refresh();
+                                            }
 
-    fn unselect_all(&mut self) {
-        self.selected.clear();
-    }
+                                            if ui
+                                                .add(egui::Button::new(
+                                                    RichText::new("Check for Updates").size(12.0),
+                                                ))
+                                                .clicked()
+                                            {
+                                                std::process::Command::new("sh")
+                                                    .arg("-c")
+                                                    .arg("curl -fsSL https://raw.githubusercontent.com/rekt0ro/CS2-Server-Blocker/main/install.sh | bash")
+                                                    .spawn()
+                                                    .unwrap_or_else(|e| {
+                                                        eprintln!("Failed to run update script: {}", e);
+
+                                                        std::process::exit(1);
+                                                    });
+                                            }
+                                        });
+                                    });
 
     fn block_selected(&mut self) {
         if self.selected.is_empty() {
