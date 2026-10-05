@@ -594,7 +594,7 @@ impl eframe::App for App {
                                                         if blocked_count > 0 {
                                                             ui.label(
                                                                 RichText::new(format!(
-                                                                    "{} blocked",
+                                                                    "{} Blocked",
                                                                     blocked_count
                                                                 ))
                                                                 .size(12.0)
@@ -605,7 +605,7 @@ impl eframe::App for App {
                                                         if selected_count > 0 {
                                                             ui.label(
                                                                 RichText::new(format!(
-                                                                    "{} selected",
+                                                                    "{} Selected",
                                                                     selected_count
                                                                 ))
                                                                 .size(12.0)
