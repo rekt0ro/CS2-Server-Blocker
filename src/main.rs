@@ -40,7 +40,7 @@ impl FirewallBackend {
     fn label(self) -> &'static str {
         match self {
             Self::Ufw => "UFW",
-            Self::Firewalld => "firewalld",
+            Self::Firewalld => "Firewalld",
             Self::Nftables => "nftables",
             Self::Iptables => "iptables",
         }
@@ -98,6 +98,7 @@ struct App {
 impl App {
     fn new(cc: &eframe::CreationContext<'_>) -> Self {
         cc.egui_ctx.set_pixels_per_point(1.0);
+        egui_system_fonts::set_auto(&cc.egui_ctx, egui_system_fonts::FontStyle::Sans);
         let mut visuals = egui::Visuals::dark();
         visuals.window_fill = Color32::from_rgb(13, 18, 27);
         visuals.panel_fill = Color32::from_rgb(13, 18, 27);
@@ -329,9 +330,13 @@ impl eframe::App for App {
         let success = Color32::from_rgb(67, 207, 139);
         let danger = Color32::from_rgb(241, 92, 104);
 
+        let total_width = ui.available_width().min(1100.0);
+        let panel_width = (total_width - 32.0).max(0.0);
+        let side_margin = ((ui.available_width() - total_width) * 0.5).max(0.0);
         egui::Frame::new()
             .fill(bg)
             .inner_margin(16)
+            .outer_margin(egui::vec2(side_margin, 0.0))
             .show(ui, |ui| {
                 // Header card
                 egui::Frame::new()
@@ -340,11 +345,12 @@ impl eframe::App for App {
                     .corner_radius(14.0)
                     .inner_margin(16)
                     .show(ui, |ui| {
+                        ui.set_width((panel_width - 32.0).max(0.0));
                         ui.horizontal(|ui| {
                             draw_app_mark(ui, accent);
                             ui.add_space(10.0);
                             ui.vertical(|ui| {
-                                ui.label(RichText::new("CS2 Server Blocker").strong().size(25.0).color(text));
+                                ui.label(RichText::new("CS2 Server Blocker").strong().size(20.0).color(text));
                                 ui.label(
                                     RichText::new("Steam SDR relay control").size(13.0).color(muted),
                                 );
@@ -377,45 +383,63 @@ impl eframe::App for App {
                 ui.add_space(10.0);
 
                 // Metrics
-                ui.horizontal_wrapped(|ui| {
-                    metric_card(
-                        ui,
-                        "FIREWALL",
-                        self.backend.map(|b| b.label()).unwrap_or("Not detected"),
-                        self.backend.is_some(),
-                        success,
-                    );
-                    metric_card(
-                        ui,
-                        "SELECTED",
-                        self.selected.len().to_string().as_str(),
-                        !self.selected.is_empty(),
-                        accent,
-                    );
-                    metric_card(
-                        ui,
-                        "BLOCKED IPS",
-                        self.stored.blocked_ips().len().to_string().as_str(),
-                        !self.stored.blocked_ips().is_empty(),
-                        danger,
-                    );
-                    metric_card(
-                        ui,
-                        "COUNTRIES",
-                        self.country_count().to_string().as_str(),
-                        true,
-                        accent,
-                    );
-                    metric_card(
-                        ui,
-                        "POPS",
-                        self.pops.len().to_string().as_str(),
-                        true,
-                        accent,
-                    );
-                });
+                ui.allocate_ui_with_layout(
+                    egui::vec2(panel_width, 68.0),
+                    egui::Layout::left_to_right(Align::Center),
+                    |ui| {
+                        ui.columns(5, |columns| {
+                            let width = columns[0].available_width();
+                            metric_card(
+                                &mut columns[0],
+                                "FIREWALL",
+                                self.backend.map(|b| b.label()).unwrap_or("Not detected"),
+                                self.backend.is_some(),
+                                success,
+                                width,
+                            );
 
-                ui.add_space(10.0);
+                            let width = columns[1].available_width();
+                            metric_card(
+                                &mut columns[1],
+                                "SELECTED",
+                                self.selected.len().to_string().as_str(),
+                                !self.selected.is_empty(),
+                                accent,
+                                width,
+                            );
+
+                            let width = columns[2].available_width();
+                            metric_card(
+                                &mut columns[2],
+                                "BLOCKED IPS",
+                                self.stored.blocked_ips().len().to_string().as_str(),
+                                !self.stored.blocked_ips().is_empty(),
+                                danger,
+                                width,
+                            );
+
+                            let width = columns[3].available_width();
+                            metric_card(
+                                &mut columns[3],
+                                "COUNTRIES",
+                                self.country_count().to_string().as_str(),
+                                true,
+                                accent,
+                                width,
+                            );
+
+                            let width = columns[4].available_width();
+                            metric_card(
+                                &mut columns[4],
+                                "POPS",
+                                self.pops.len().to_string().as_str(),
+                                true,
+                                accent,
+                                width,
+                            );
+                        });
+                    },
+                );
 
                 // Toolbar
                 egui::Frame::new()
@@ -424,6 +448,7 @@ impl eframe::App for App {
                     .corner_radius(12.0)
                     .inner_margin(10)
                     .show(ui, |ui| {
+                        ui.set_width((panel_width - 20.0).max(0.0));
                         ui.horizontal(|ui| {
                             ui.label(RichText::new("SERVER REGIONS").strong().color(muted).size(11.0));
                             ui.add_space(8.0);
@@ -493,6 +518,7 @@ impl eframe::App for App {
                     .corner_radius(12.0)
                     .inner_margin(10)
                     .show(ui, |ui| {
+                        ui.set_width((panel_width - 20.0).max(0.0));
                         let groups = self.visible_country_groups();
                         let blocked_ips = self.stored.blocked_ips();
 
@@ -581,20 +607,22 @@ impl eframe::App for App {
                                                         if blocked_count > 0 {
                                                             ui.label(
                                                                 RichText::new(format!(
-                                                                    "{} blocked",
+                                                                    "{} Blocked",
                                                                     blocked_count
                                                                 ))
-                                                                .small()
+                                                                .size(12.0)
+                                                                .strong()
                                                                 .color(danger),
                                                             );
                                                         }
                                                         if selected_count > 0 {
                                                             ui.label(
                                                                 RichText::new(format!(
-                                                                    "{} selected",
+                                                                    "{} Selected",
                                                                     selected_count
                                                                 ))
-                                                                .small()
+                                                                .size(12.0)
+                                                                .strong()
                                                                 .color(accent),
                                                             );
                                                         }
@@ -634,7 +662,7 @@ impl eframe::App for App {
                                                                     ui.horizontal(|ui| {
                                                                         ui.label(
                                                                             RichText::new(pop.code.to_uppercase())
-                                                                                .small()
+                                                                                .size(12.0)
                                                                                 .strong()
                                                                                 .color(accent),
                                                                         );
@@ -643,7 +671,7 @@ impl eframe::App for App {
                                                                                 "{} relay(s)",
                                                                                 pop.relays.len()
                                                                             ))
-                                                                            .small()
+                                                                            .size(12.0)
                                                                             .color(muted),
                                                                         );
                                                                     });
@@ -654,7 +682,7 @@ impl eframe::App for App {
                                                                         if is_blocked {
                                                                             ui.label(
                                                                                 RichText::new("BLOCKED")
-                                                                                    .small()
+                                                                                    .size(12.0)
                                                                                     .strong()
                                                                                     .color(danger),
                                                                             );
@@ -677,36 +705,6 @@ impl eframe::App for App {
 
                 ui.add_space(10.0);
 
-                // Activity card
-                egui::Frame::new()
-                    .fill(surface)
-                    .stroke(Stroke::new(1.0, border))
-                    .corner_radius(12.0)
-                    .inner_margin(10)
-                    .show(ui, |ui| {
-                        ui.horizontal(|ui| {
-                            ui.label(RichText::new("ACTIVITY").strong().color(muted).size(11.0));
-                            ui.with_layout(
-                                egui::Layout::right_to_left(Align::Center),
-                                |ui| {
-                                    if self.busy {
-                                        ui.spinner();
-                                        ui.label(RichText::new("Working").color(muted).small());
-                                    }
-                                },
-                            );
-                        });
-                        ui.add_space(5.0);
-                        ScrollArea::vertical()
-                            .stick_to_bottom(true)
-                            .max_height(108.0)
-                            .show(ui, |ui| {
-                                for line in self.log.iter().rev().take(20).rev() {
-                                    ui.label(RichText::new(line).small().color(text));
-                                }
-                            });
-                    });
-
                 if let Some(error) = &self.error {
                     ui.add_space(8.0);
                     egui::Frame::new()
@@ -715,6 +713,7 @@ impl eframe::App for App {
                         .corner_radius(9.0)
                         .inner_margin(9)
                         .show(ui, |ui| {
+                            ui.set_width((panel_width - 18.0).max(0.0));
                             ui.label(RichText::new(error).color(Color32::from_rgb(255, 170, 178)));
                         });
                 }
@@ -752,7 +751,14 @@ fn draw_app_mark(ui: &mut egui::Ui, accent: Color32) {
     );
 }
 
-fn metric_card(ui: &mut egui::Ui, title: &str, value: &str, emphasized: bool, accent: Color32) {
+fn metric_card(
+    ui: &mut egui::Ui,
+    title: &str,
+    value: &str,
+    emphasized: bool,
+    accent: Color32,
+    width: f32,
+) {
     let bg = if emphasized {
         Color32::from_rgb(24, 35, 49)
     } else {
@@ -764,19 +770,22 @@ fn metric_card(ui: &mut egui::Ui, title: &str, value: &str, emphasized: bool, ac
         .corner_radius(10.0)
         .inner_margin(10)
         .show(ui, |ui| {
-            ui.horizontal(|ui| {
-                let (dot, _) = ui.allocate_exact_size(egui::vec2(5.0, 28.0), Sense::hover());
+            ui.set_width((width - 20.0).max(0.0));
+            ui.set_min_height(48.0);
+            ui.with_layout(egui::Layout::left_to_right(Align::Center), |ui| {
+                let (dot, _) = ui.allocate_exact_size(egui::vec2(5.0, 36.0), Sense::hover());
                 ui.painter().rect_filled(dot, 3.0, accent);
                 ui.add_space(3.0);
                 ui.vertical(|ui| {
                     ui.label(
                         RichText::new(title)
-                            .small()
+                            .size(12.0)
                             .strong()
                             .color(Color32::from_rgb(133, 148, 169)),
                     );
                     ui.label(
                         RichText::new(value)
+                            .size(18.0)
                             .strong()
                             .color(Color32::from_rgb(235, 241, 249)),
                     );
