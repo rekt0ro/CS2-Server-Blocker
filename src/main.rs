@@ -98,6 +98,7 @@ struct App {
 impl App {
     fn new(cc: &eframe::CreationContext<'_>) -> Self {
         cc.egui_ctx.set_pixels_per_point(1.0);
+        egui_system_fonts::set_auto(&cc.egui_ctx, egui_system_fonts::FontStyle::Sans);
         let mut visuals = egui::Visuals::dark();
         visuals.window_fill = Color32::from_rgb(13, 18, 27);
         visuals.panel_fill = Color32::from_rgb(13, 18, 27);
@@ -781,8 +782,9 @@ fn metric_card(
         .corner_radius(10.0)
         .inner_margin(10)
         .show(ui, |ui| {
-            ui.set_min_width((width - 20.0).max(0.0));
-            ui.horizontal(|ui| {
+            ui.set_width((width - 20.0).max(0.0));
+            ui.set_min_height(48.0);
+            ui.with_layout(egui::Layout::left_to_right(Align::Center), |ui| {
                 let (dot, _) = ui.allocate_exact_size(egui::vec2(5.0, 28.0), Sense::hover());
                 ui.painter().rect_filled(dot, 3.0, accent);
                 ui.add_space(3.0);
