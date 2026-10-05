@@ -345,7 +345,7 @@ impl eframe::App for App {
                             draw_app_mark(ui, accent);
                             ui.add_space(10.0);
                             ui.vertical(|ui| {
-                                ui.label(RichText::new("CS2 Server Blocker").strong().size(25.0).color(text));
+                                ui.label(RichText::new("CS2 Server Blocker").strong().size(20.0).color(text));
                                 ui.label(
                                     RichText::new("Steam SDR relay control").size(13.0).color(muted),
                                 );
@@ -379,8 +379,11 @@ impl eframe::App for App {
 
                 // Metrics
                 ui.horizontal(|ui| {
+                    let side_margin = 8.0;
                     let card_spacing = ui.spacing().item_spacing.x;
-                    let card_width = ((ui.available_width() - card_spacing * 4.0) / 5.0).max(0.0);
+                    let available = (ui.available_width() - side_margin * 2.0).max(0.0);
+                    let card_width = ((available - card_spacing * 4.0) / 5.0).max(0.0);
+                    ui.add_space(side_margin);
 
                     metric_card(
                         ui,
@@ -422,6 +425,7 @@ impl eframe::App for App {
                         accent,
                         card_width,
                     );
+                    ui.add_space(side_margin);
                 });
 
                 ui.add_space(10.0);
@@ -785,7 +789,7 @@ fn metric_card(
             ui.set_width((width - 20.0).max(0.0));
             ui.set_min_height(48.0);
             ui.with_layout(egui::Layout::left_to_right(Align::Center), |ui| {
-                let (dot, _) = ui.allocate_exact_size(egui::vec2(5.0, 28.0), Sense::hover());
+                let (dot, _) = ui.allocate_exact_size(egui::vec2(5.0, 36.0), Sense::hover());
                 ui.painter().rect_filled(dot, 3.0, accent);
                 ui.add_space(3.0);
                 ui.vertical(|ui| {
