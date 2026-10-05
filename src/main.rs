@@ -483,14 +483,11 @@ impl eframe::App for App {
                                 |ui| {
                                     ui.add_enabled_ui(!self.busy, |ui| {
                                         if ui
-                                            .add_sized(
-                                                egui::vec2(0.0, 18.0),
-                                                egui::Button::new(
-                                                    RichText::new("Check for Updates")
-                                                        .strong()
-                                                        .size(11.0),
-                                                ),
-                                            )
+                                            .add(egui::Button::new(
+                                                RichText::new("Check for Updates")
+                                                    .strong()
+                                                    .size(11.0),
+                                            ))
                                             .clicked()
                                         {
                                             self.start_update_check();
