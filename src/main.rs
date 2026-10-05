@@ -387,8 +387,9 @@ impl eframe::App for App {
                     egui::vec2(panel_width, 68.0),
                     egui::Layout::left_to_right(Align::Center),
                     |ui| {
-                    let card_spacing = ui.spacing().item_spacing.x;
-                    let card_width = ((ui.available_width() - card_spacing * 4.0) / 5.0).max(0.0);
+                    let card_spacing = ui.spacing().item_spacing.x + 1.0;
+                    ui.spacing_mut().item_spacing.x = card_spacing;
+                    let card_width = ((panel_width - card_spacing * 4.0) / 5.0).max(0.0);
 
                     metric_card(
                         ui,
