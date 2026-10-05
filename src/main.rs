@@ -1713,10 +1713,7 @@ fn flag_malaysia(p: &egui::Painter, r: Rect) {
 
 fn fetch_pops() -> Result<Vec<Pop>, String> {
     let client = Client::builder()
-        .user_agent(format!(
-            "cs2-server-blocker/{}",
-            env!("CARGO_PKG_VERSION")
-        ))
+        .user_agent(format!("cs2-server-blocker/{}", env!("CARGO_PKG_VERSION")))
         .timeout(std::time::Duration::from_secs(20))
         .build()
         .map_err(|e| format!("HTTP client error: {e}"))?;
@@ -1724,15 +1721,16 @@ fn fetch_pops() -> Result<Vec<Pop>, String> {
     let mut last_error = None;
 
     for attempt in 0..3 {
-        let response = client.get(SDR_URL).send().and_then(|response| response.error_for_status());
+        let response = client
+            .get(SDR_URL)
+            .send()
+            .and_then(|response| response.error_for_status());
 
         match response {
             Ok(response) => match response.json::<Value>() {
                 Ok(json) => {
-                    let pops_obj = json
-                        .get("pops")
-                        .and_then(Value::as_object)
-                        .ok_or_else(|| {
+                    let pops_obj =
+                        json.get("pops").and_then(Value::as_object).ok_or_else(|| {
                             "Steam SDR response does not contain a 'pops' object.".to_string()
                         })?;
 
@@ -1744,9 +1742,7 @@ fn fetch_pops() -> Result<Vec<Pop>, String> {
                             .map(|items| {
                                 items
                                     .iter()
-                                    .filter_map(|relay| {
-                                        relay.get("ipv4").and_then(Value::as_str)
-                                    })
+                                    .filter_map(|relay| relay.get("ipv4").and_then(Value::as_str))
                                     .filter(|ip| is_ipv4(ip))
                                     .map(ToOwned::to_owned)
                                     .collect::<Vec<_>>()
@@ -1790,7 +1786,7 @@ fn fetch_pops() -> Result<Vec<Pop>, String> {
             },
             Err(error) => {
                 last_error = Some(format!("Could not reach Steam SDR API: {error}"));
-            },
+            }
         }
 
         if attempt < 2 {
