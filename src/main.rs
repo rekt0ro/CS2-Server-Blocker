@@ -454,7 +454,14 @@ impl eframe::App for App {
                                     RichText::new("Steam SDR relay control").size(13.0).color(muted),
                                 );
                             });
-                            ui.with_layout(
+
+                            let actions_width = 270.0;
+                            ui.add_space(
+                                (ui.available_width() - actions_width)
+                                    .max(0.0),
+                            );
+                            ui.allocate_ui_with_layout(
+                                egui::vec2(actions_width, 34.0),
                                 egui::Layout::right_to_left(Align::Center),
                                 |ui| {
                                     ui.add_enabled_ui(!self.busy, |ui| {
