@@ -458,35 +458,47 @@ impl eframe::App for App {
                                 egui::Layout::right_to_left(Align::Center),
                                 |ui| {
                                     ui.add_enabled_ui(!self.busy, |ui| {
-                                        ui.vertical(|ui| {
-                                            if ui
-                                                .add(egui::Button::new(
-                                                    RichText::new("Refresh Data").strong(),
-                                                ))
-                                                .clicked()
-                                            {
-                                                self.start_refresh();
-                                            }
-                                            if ui
-                                                .add(egui::Button::new(
-                                                    RichText::new("Check for Updates").strong(),
-                                                ))
-                                                .clicked()
-                                            {
-                                                self.start_update_check();
-                                            }
-                                        });
+                                        if ui
+                                            .add(egui::Button::new(
+                                                RichText::new("Refresh Data").strong(),
+                                            ))
+                                            .clicked()
+                                        {
+                                            self.start_refresh();
+                                        }
                                     });
                                 },
                             );
                         });
                         ui.add_space(8.0);
-                        ui.label(
-                            RichText::new(
-                                "Pick a country for all of its PoPs, or expand it to choose individual relays.",
-                            )
-                            .color(muted),
-                        );
+                        ui.horizontal(|ui| {
+                            ui.label(
+                                RichText::new(
+                                    "Pick a country for all of its PoPs, or expand it to choose individual relays.",
+                                )
+                                .color(muted),
+                            );
+                            ui.with_layout(
+                                egui::Layout::right_to_left(Align::Center),
+                                |ui| {
+                                    ui.add_enabled_ui(!self.busy, |ui| {
+                                        if ui
+                                            .add_sized(
+                                                egui::vec2(0.0, 18.0),
+                                                egui::Button::new(
+                                                    RichText::new("Check for Updates")
+                                                        .strong()
+                                                        .size(11.0),
+                                                ),
+                                            )
+                                            .clicked()
+                                        {
+                                            self.start_update_check();
+                                        }
+                                    });
+                                },
+                            );
+                        });
                     });
 
                 ui.add_space(10.0);
