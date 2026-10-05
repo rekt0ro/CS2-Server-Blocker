@@ -10,7 +10,6 @@ use std::process::Command;
 use std::sync::mpsc::{self, Receiver};
 use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
-use std::thread;
 
 const SDR_URL: &str = "https://api.steampowered.com/ISteamApps/GetSDRConfig/v1/?appid=730";
 const STATE_FILE: &str = "state.json";
