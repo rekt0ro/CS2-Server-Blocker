@@ -639,28 +639,6 @@ impl eframe::App for App {
                             });
                             ui.add_space(32.0);
                         } else {
-                                    ui.label(RichText::new("No relay data loaded").strong().size(17.0).color(text));
-                                    ui.add_space(4.0);
-                                    ui.label(
-                                        RichText::new(
-                                            self.error
-                                                .as_deref()
-                                                .unwrap_or("Refresh the Steam SDR data to try again."),
-                                        )
-                                        .color(muted),
-                                    );
-                                }
-                            });
-                            ui.add_space(32.0);
-                        } else if groups.is_empty() {
-                            ui.add_space(32.0);
-                            ui.vertical_centered(|ui| {
-                                ui.label(RichText::new("No matching regions").strong().size(17.0).color(text));
-                                ui.add_space(4.0);
-                                ui.label(RichText::new("Try another country, city, or PoP code.").color(muted));
-                            });
-                            ui.add_space(32.0);
-                        } else {
                             ScrollArea::vertical()
                                 .id_salt("country_pop_tree")
                                 .auto_shrink([false, false])
