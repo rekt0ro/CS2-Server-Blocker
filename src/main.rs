@@ -9,7 +9,7 @@ use std::process::Command;
 use std::sync::mpsc::{self, Receiver};
 use std::thread;
 
-const SDR_URL: &str = "https://api.steampowered.com/ISteamApps/GetSDRConfig/v1/?appid=730";
+const SDR_URL: &str = "https:
 const STATE_FILE: &str = "state.json";
 const UFW_COMMENT: &str = "CS2-Server-Blocker";
 const FIREWALL_COMMENT: &str = "CS2-Server-Blocker";
@@ -338,6 +338,7 @@ impl eframe::App for App {
             .inner_margin(16)
             .outer_margin(egui::vec2(side_margin, 0.0))
             .show(ui, |ui| {
+                
                 egui::Frame::new()
                     .fill(surface)
                     .stroke(Stroke::new(1.0, border))
@@ -381,6 +382,7 @@ impl eframe::App for App {
 
                 ui.add_space(10.0);
 
+                
                 ui.allocate_ui_with_layout(
                     egui::vec2(panel_width, 68.0),
                     egui::Layout::left_to_right(Align::Center),
@@ -439,6 +441,7 @@ impl eframe::App for App {
                     },
                 );
 
+                
                 egui::Frame::new()
                     .fill(surface)
                     .stroke(Stroke::new(1.0, border))
@@ -508,6 +511,7 @@ impl eframe::App for App {
 
                 ui.add_space(10.0);
 
+                
                 egui::Frame::new()
                     .fill(surface)
                     .stroke(Stroke::new(1.0, border))
