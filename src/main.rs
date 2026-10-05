@@ -3,16 +3,24 @@ use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::env;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::mpsc::{self, Receiver};
 use std::thread;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 const SDR_URL: &str = "https://api.steampowered.com/ISteamApps/GetSDRConfig/v1/?appid=730";
 const STATE_FILE: &str = "state.json";
 const UFW_COMMENT: &str = "CS2-Server-Blocker";
 const FIREWALL_COMMENT: &str = "CS2-Server-Blocker";
+const GITHUB_LATEST_RELEASE_URL: &str =
+    "https://api.github.com/repos/rekt0ro/CS2-Server-Blocker/releases/latest";
+const LINUX_RELEASE_ASSET: &str = "cs2-server-blocker-x86_64-linux.tar.gz";
+const INSTALLED_BINARY: &str = "/usr/local/bin/cs2-server-blocker";
+const INSTALLED_DESKTOP_ENTRY: &str = "/usr/share/applications/cs2-server-blocker.desktop";
+const INSTALLED_ICON: &str = "/usr/share/icons/hicolor/scalable/apps/cs2-server-blocker.svg";
 
 #[derive(Clone, Debug)]
 struct Pop {
@@ -71,6 +79,7 @@ impl StoredState {
 
 enum WorkerResult {
     Refreshed(Result<Vec<Pop>, String>),
+    Updated(Result<UpdateOutcome, String>),
     FirewallAction(Result<ActionReport, String>),
 }
 
@@ -80,6 +89,51 @@ struct ActionReport {
     pop_count: usize,
     ip_count: usize,
     backend: FirewallBackend,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct GithubRelease {
+    tag_name: String,
+    assets: Vec<GithubReleaseAsset>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct GithubReleaseAsset {
+    name: String,
+    browser_download_url: String,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct AppVersion {
+    major: u64,
+    minor: u64,
+    patch: u64,
+}
+
+impl AppVersion {
+    fn parse(value: &str) -> Option<Self> {
+        let version = value.trim().strip_prefix('v').unwrap_or(value.trim());
+        let mut parts = version.split('.');
+        let major = parts.next()?.parse().ok()?;
+        let minor = parts.next()?.parse().ok()?;
+        let patch = parts.next()?.split(['-', '+']).next()?.parse().ok()?;
+
+        if parts.next().is_some() {
+            return None;
+        }
+
+        Some(Self {
+            major,
+            minor,
+            patch,
+        })
+    }
+}
+
+#[derive(Debug)]
+enum UpdateOutcome {
+    UpToDate { version: AppVersion },
+    Updated { version: AppVersion },
 }
 
 #[derive(Default)]
@@ -151,6 +205,20 @@ impl App {
         });
     }
 
+    fn start_update_check(&mut self) {
+        if self.busy {
+            return;
+        }
+        self.busy = true;
+        self.error = None;
+        let (tx, rx) = mpsc::channel();
+        self.worker_rx = Some(rx);
+        thread::spawn(move || {
+            let result = check_for_updates_and_install();
+            let _ = tx.send(WorkerResult::Updated(result));
+        });
+    }
+
     fn start_action(&mut self, task: ActionTask) {
         if self.busy {
             return;
@@ -186,6 +254,24 @@ impl App {
                 Err(err) => {
                     self.error = Some(err.clone());
                     self.log.push(format!("Refresh failed: {err}"));
+                }
+            },
+            WorkerResult::Updated(result) => match result {
+                Ok(UpdateOutcome::UpToDate { version }) => {
+                    self.log.push(format!(
+                        "You're already on the latest version, v{}. ",
+                        format_version(version)
+                    ));
+                }
+                Ok(UpdateOutcome::Updated { version }) => {
+                    self.log.push(format!(
+                        "Updated to v{}. Restart the app to use the new version.",
+                        format_version(version)
+                    ));
+                }
+                Err(err) => {
+                    self.error = Some(err.clone());
+                    self.log.push(format!("Update failed: {err}"));
                 }
             },
             WorkerResult::FirewallAction(result) => match result {
@@ -320,74 +406,110 @@ impl eframe::App for App {
         ui.ctx()
             .request_repaint_after(std::time::Duration::from_millis(100));
 
-        let bg = Color32::from_rgb(13, 18, 27);
-        let surface = Color32::from_rgb(20, 28, 40);
-        let surface_2 = Color32::from_rgb(24, 34, 48);
-        let border = Color32::from_rgb(45, 58, 76);
-        let text = Color32::from_rgb(235, 241, 249);
-        let muted = Color32::from_rgb(150, 164, 184);
-        let accent = Color32::from_rgb(77, 166, 255);
-        let success = Color32::from_rgb(67, 207, 139);
-        let danger = Color32::from_rgb(241, 92, 104);
+        let bg = Color32::from_rgb(10, 14, 22);
+        let surface = Color32::from_rgb(17, 24, 35);
+        let surface_2 = Color32::from_rgb(22, 31, 45);
+        let surface_3 = Color32::from_rgb(27, 38, 54);
+        let border = Color32::from_rgb(42, 55, 73);
+        let text = Color32::from_rgb(238, 243, 249);
+        let muted = Color32::from_rgb(142, 157, 178);
+        let accent = Color32::from_rgb(76, 166, 255);
+        let success = Color32::from_rgb(68, 204, 140);
+        let danger = Color32::from_rgb(240, 92, 106);
+        let warning = Color32::from_rgb(244, 181, 72);
 
-        let total_width = ui.available_width().min(1100.0);
-        let panel_width = (total_width - 32.0).max(0.0);
+        let total_width = ui.available_width().min(1120.0);
+        let content_width = (total_width - 32.0).max(0.0);
         let side_margin = ((ui.available_width() - total_width) * 0.5).max(0.0);
+        let blocked_ips = self.stored.blocked_ips();
+        let groups = self.visible_country_groups();
+        let current_log = self.log.last().cloned().unwrap_or_else(|| "Ready.".into());
+
         egui::Frame::new()
             .fill(bg)
             .inner_margin(16)
             .outer_margin(egui::vec2(side_margin, 0.0))
             .show(ui, |ui| {
-                // Header card
                 egui::Frame::new()
                     .fill(surface)
                     .stroke(Stroke::new(1.0, border))
-                    .corner_radius(14.0)
-                    .inner_margin(16)
+                    .corner_radius(16.0)
+                    .inner_margin(14)
                     .show(ui, |ui| {
-                        ui.set_width((panel_width - 32.0).max(0.0));
+                        ui.set_width((content_width - 28.0).max(0.0));
                         ui.horizontal(|ui| {
                             draw_app_mark(ui, accent);
-                            ui.add_space(10.0);
+                            ui.add_space(12.0);
                             ui.vertical(|ui| {
-                                ui.label(RichText::new("CS2 Server Blocker").strong().size(20.0).color(text));
+                                ui.horizontal(|ui| {
+                                    ui.label(
+                                        RichText::new("CS2 Server Blocker")
+                                            .strong()
+                                            .size(21.0)
+                                            .color(text),
+                                    );
+                                    ui.add_space(7.0);
+                                    ui.label(
+                                        RichText::new(format!("v{}", env!("CARGO_PKG_VERSION")))
+                                            .size(11.0)
+                                            .strong()
+                                            .color(muted),
+                                    );
+                                });
+                                ui.add_space(2.0);
                                 ui.label(
-                                    RichText::new("Steam SDR relay control").size(13.0).color(muted),
+                                    RichText::new(
+                                        "Steam SDR relay control  ·  Fast region selection and firewall control",
+                                    )
+                                    .size(12.0)
+                                    .color(muted),
                                 );
                             });
+
                             ui.with_layout(
                                 egui::Layout::right_to_left(Align::Center),
                                 |ui| {
                                     ui.add_enabled_ui(!self.busy, |ui| {
-                                        if ui
-                                            .add(egui::Button::new(
-                                                RichText::new("Refresh Data").strong(),
-                                            ))
-                                            .clicked()
-                                        {
-                                            self.start_refresh();
-                                        }
+                                        ui.vertical(|ui| {
+                                            if ui
+                                                .add_sized(
+                                                    egui::vec2(152.0, 26.0),
+                                                    egui::Button::new(
+                                                        RichText::new("Refresh Data").strong().size(12.0),
+                                                    ),
+                                                )
+                                                .clicked()
+                                            {
+                                                self.start_refresh();
+                                            }
+                                            ui.add_space(4.0);
+                                            if ui
+                                                .add_sized(
+                                                    egui::vec2(152.0, 26.0),
+                                                    egui::Button::new(
+                                                        RichText::new("Check for Updates")
+                                                            .strong()
+                                                            .size(12.0),
+                                                    ),
+                                                )
+                                                .clicked()
+                                            {
+                                                self.start_update_check();
+                                            }
+                                        });
                                     });
                                 },
                             );
                         });
-                        ui.add_space(8.0);
-                        ui.label(
-                            RichText::new(
-                                "Pick a country for all of its PoPs, or expand it to choose individual relays.",
-                            )
-                            .color(muted),
-                        );
                     });
 
                 ui.add_space(10.0);
 
-                // Metrics
                 ui.allocate_ui_with_layout(
-                    egui::vec2(panel_width, 68.0),
+                    egui::vec2(content_width, 66.0),
                     egui::Layout::left_to_right(Align::Center),
                     |ui| {
-                        ui.columns(5, |columns| {
+                        ui.columns(4, |columns| {
                             let width = columns[0].available_width();
                             metric_card(
                                 &mut columns[0],
@@ -402,7 +524,7 @@ impl eframe::App for App {
                             metric_card(
                                 &mut columns[1],
                                 "SELECTED",
-                                self.selected.len().to_string().as_str(),
+                                format!("{} PoPs", self.selected.len()).as_str(),
                                 !self.selected.is_empty(),
                                 accent,
                                 width,
@@ -412,8 +534,8 @@ impl eframe::App for App {
                             metric_card(
                                 &mut columns[2],
                                 "BLOCKED IPS",
-                                self.stored.blocked_ips().len().to_string().as_str(),
-                                !self.stored.blocked_ips().is_empty(),
+                                blocked_ips.len().to_string().as_str(),
+                                !blocked_ips.is_empty(),
                                 danger,
                                 width,
                             );
@@ -421,19 +543,14 @@ impl eframe::App for App {
                             let width = columns[3].available_width();
                             metric_card(
                                 &mut columns[3],
-                                "COUNTRIES",
-                                self.country_count().to_string().as_str(),
-                                true,
-                                accent,
-                                width,
-                            );
-
-                            let width = columns[4].available_width();
-                            metric_card(
-                                &mut columns[4],
-                                "POPS",
-                                self.pops.len().to_string().as_str(),
-                                true,
+                                "NETWORK DATA",
+                                format!(
+                                    "{} countries  ·  {} PoPs",
+                                    self.country_count(),
+                                    self.pops.len()
+                                )
+                                .as_str(),
+                                !self.pops.is_empty(),
                                 accent,
                                 width,
                             );
@@ -441,64 +558,144 @@ impl eframe::App for App {
                     },
                 );
 
-                // Toolbar
+                ui.add_space(10.0);
+
                 egui::Frame::new()
                     .fill(surface)
                     .stroke(Stroke::new(1.0, border))
-                    .corner_radius(12.0)
-                    .inner_margin(10)
+                    .corner_radius(14.0)
+                    .inner_margin(12)
                     .show(ui, |ui| {
-                        ui.set_width((panel_width - 20.0).max(0.0));
+                        ui.set_width((content_width - 24.0).max(0.0));
+
                         ui.horizontal(|ui| {
-                            ui.label(RichText::new("SERVER REGIONS").strong().color(muted).size(11.0));
-                            ui.add_space(8.0);
-                            if self.busy {
-                                ui.spinner();
-                                ui.label(RichText::new("Updating Steam SDR data...").color(muted));
-                            } else {
+                            ui.vertical(|ui| {
                                 ui.label(
-                                    RichText::new("Live relay configuration").color(muted),
+                                    RichText::new("SERVER REGIONS")
+                                        .strong()
+                                        .size(11.0)
+                                        .color(muted),
                                 );
+                                let status_text = if self.busy {
+                                    "Working..."
+                                } else if self.pops.is_empty() {
+                                    "Waiting for relay data"
+                                } else {
+                                    "Live relay configuration"
+                                };
+                                let status_color = if self.busy {
+                                    warning
+                                } else if self.pops.is_empty() {
+                                    muted
+                                } else {
+                                    success
+                                };
+                                ui.add_space(2.0);
+                                status_badge(ui, status_text, status_color);
+                            });
+
+                            ui.with_layout(
+                                egui::Layout::right_to_left(Align::Center),
+                                |ui| {
+                                    let selected_text = format!("{} selected", self.selected.len());
+                                    let blocked_text = format!("{} blocked", blocked_ips.len());
+                                    status_badge(ui, &selected_text, accent);
+                                    ui.add_space(6.0);
+                                    status_badge(ui, &blocked_text, danger);
+                                },
+                            );
+                        });
+
+                        ui.add_space(10.0);
+
+                        ui.horizontal(|ui| {
+                            let search_width = (ui.available_width() - 98.0).max(160.0);
+                            ui.add_sized(
+                                egui::vec2(search_width, 34.0),
+                                TextEdit::singleline(&mut self.search)
+                                    .hint_text("Search country, city, or PoP code"),
+                            );
+                            ui.add_space(6.0);
+                            if ui
+                                .add_enabled(
+                                    !self.search.is_empty(),
+                                    egui::Button::new(RichText::new("Clear").size(12.0)),
+                                )
+                                .clicked()
+                            {
+                                self.search.clear();
                             }
                         });
-                        ui.add_space(6.0);
-                        ui.add(
-                            TextEdit::singleline(&mut self.search)
-                                .hint_text("Search country, city, or PoP code")
-                                .desired_width(f32::INFINITY),
-                        );
-                        ui.add_space(7.0);
+
+                        ui.add_space(9.0);
+
                         ui.horizontal_wrapped(|ui| {
                             ui.add_enabled_ui(!self.busy && !self.pops.is_empty(), |ui| {
                                 if ui
-                                    .add(egui::Button::new(RichText::new("Select All").strong()))
+                                    .add(
+                                        egui::Button::new(
+                                            RichText::new("Select All").strong().size(12.0),
+                                        )
+                                        .min_size(egui::vec2(106.0, 30.0)),
+                                    )
                                     .clicked()
                                 {
                                     self.select_all();
                                 }
-                                if ui.button("Unselect All").clicked() {
+                                if ui
+                                    .add_sized(
+                                        egui::vec2(106.0, 30.0),
+                                        egui::Button::new(
+                                            RichText::new("Unselect All").size(12.0),
+                                        ),
+                                    )
+                                    .clicked()
+                                {
                                     self.unselect_all();
                                 }
                             });
+
+                            ui.add_space(6.0);
                             ui.separator();
+                            ui.add_space(6.0);
+
                             ui.add_enabled_ui(!self.busy, |ui| {
                                 if ui
-                                    .add(
+                                    .add_sized(
+                                        egui::vec2(122.0, 30.0),
                                         egui::Button::new(
-                                            RichText::new("Block Selected").strong().color(accent),
+                                            RichText::new("Block Selected")
+                                                .strong()
+                                                .color(accent)
+                                                .size(12.0),
                                         ),
                                     )
                                     .clicked()
                                 {
                                     self.block_selected();
                                 }
-                                if ui.button(RichText::new("Unblock Selected").strong().color(danger)).clicked() {
+                                if ui
+                                    .add_sized(
+                                        egui::vec2(132.0, 30.0),
+                                        egui::Button::new(
+                                            RichText::new("Unblock Selected")
+                                                .strong()
+                                                .color(danger)
+                                                .size(12.0),
+                                        ),
+                                    )
+                                    .clicked()
+                                {
                                     self.unblock_selected();
                                 }
                                 if ui
-                                    .add(
+                                    .add_sized(
+                                        egui::vec2(108.0, 30.0),
                                         egui::Button::new(
-                                            RichText::new("Unblock All").strong().color(danger),
+                                            RichText::new("Unblock All")
+                                                .strong()
+                                                .color(danger)
+                                                .size(12.0),
                                         ),
                                     )
                                     .clicked()
@@ -511,30 +708,65 @@ impl eframe::App for App {
 
                 ui.add_space(10.0);
 
-                // Country tree card
                 egui::Frame::new()
                     .fill(surface)
                     .stroke(Stroke::new(1.0, border))
-                    .corner_radius(12.0)
-                    .inner_margin(10)
+                    .corner_radius(14.0)
+                    .inner_margin(8)
                     .show(ui, |ui| {
-                        ui.set_width((panel_width - 20.0).max(0.0));
-                        let groups = self.visible_country_groups();
-                        let blocked_ips = self.stored.blocked_ips();
+                        ui.set_width((content_width - 16.0).max(0.0));
+
+                        ui.horizontal(|ui| {
+                            ui.label(
+                                RichText::new("COUNTRIES")
+                                    .strong()
+                                    .size(11.0)
+                                    .color(muted),
+                            );
+                            ui.add_space(8.0);
+                            ui.label(
+                                RichText::new(format!("{} matches", groups.len()))
+                                    .size(11.0)
+                                    .color(muted),
+                            );
+                            ui.with_layout(
+                                egui::Layout::right_to_left(Align::Center),
+                                |ui| {
+                                    if !self.selected.is_empty() {
+                                        status_badge(
+                                            ui,
+                                            &format!("{} selected", self.selected.len()),
+                                            accent,
+                                        );
+                                    }
+                                },
+                            );
+                        });
+
+                        ui.add_space(6.0);
 
                         if groups.is_empty() {
-                            ui.add_space(32.0);
+                            ui.add_space(26.0);
                             ui.vertical_centered(|ui| {
-                                ui.label(RichText::new("No matching regions").strong().size(17.0).color(text));
+                                ui.label(
+                                    RichText::new("No matching regions")
+                                        .strong()
+                                        .size(17.0)
+                                        .color(text),
+                                );
                                 ui.add_space(4.0);
-                                ui.label(RichText::new("Try another country, city, or PoP code.").color(muted));
+                                ui.label(
+                                    RichText::new("Try a country, city, or PoP code.")
+                                        .size(12.0)
+                                        .color(muted),
+                                );
                             });
-                            ui.add_space(32.0);
+                            ui.add_space(26.0);
                         } else {
                             ScrollArea::vertical()
                                 .id_salt("country_pop_tree")
                                 .auto_shrink([false, false])
-                                .max_height(455.0)
+                                .max_height(390.0)
                                 .show(ui, |ui| {
                                     for (index, group) in groups.iter().enumerate() {
                                         let total = group.pops.len();
@@ -551,7 +783,8 @@ impl eframe::App for App {
                                             })
                                             .count();
                                         let fully_selected = selected_count == total;
-                                        let partially_selected = selected_count > 0 && selected_count < total;
+                                        let partially_selected =
+                                            selected_count > 0 && selected_count < total;
 
                                         let state =
                                             egui::collapsing_header::CollapsingState::load_with_default_open(
@@ -565,126 +798,168 @@ impl eframe::App for App {
                                                 let row_rect = ui.available_rect_before_wrap();
                                                 let row_response = ui.interact(
                                                     row_rect,
-                                                    ui.make_persistent_id(("country-row", &group.country)),
+                                                    ui.make_persistent_id((
+                                                        "country-row",
+                                                        &group.country,
+                                                    )),
                                                     Sense::hover(),
                                                 );
                                                 if row_response.hovered() {
                                                     ui.painter().rect_filled(
                                                         row_rect,
-                                                        8.0,
-                                                        Color32::from_rgb(26, 37, 51),
+                                                        9.0,
+                                                        surface_3,
                                                     );
                                                 }
 
                                                 let mut select_country = fully_selected;
                                                 let checkbox = ui.checkbox(&mut select_country, "");
                                                 if checkbox.changed() {
-                                                    self.set_country_selected(&group.pops, select_country);
+                                                    self.set_country_selected(
+                                                        &group.pops,
+                                                        select_country,
+                                                    );
                                                 }
 
                                                 draw_flag(ui, &group.country);
-                                                ui.add_space(5.0);
-                                                ui.label(
-                                                    RichText::new(&group.country)
-                                                        .strong()
-                                                        .size(16.0)
-                                                        .color(text),
-                                                );
-                                                ui.label(
-                                                    RichText::new(format!("{} PoPs", total))
-                                                        .color(muted),
-                                                );
-                                                if partially_selected {
-                                                    ui.label(
-                                                        RichText::new("partial")
-                                                            .small()
-                                                            .color(Color32::from_rgb(255, 193, 77)),
-                                                    );
-                                                }
+                                                ui.add_space(7.0);
+                                                ui.vertical(|ui| {
+                                                    ui.horizontal(|ui| {
+                                                        ui.label(
+                                                            RichText::new(&group.country)
+                                                                .strong()
+                                                                .size(15.0)
+                                                                .color(text),
+                                                        );
+                                                        ui.add_space(6.0);
+                                                        ui.label(
+                                                            RichText::new(format!("{} PoPs", total))
+                                                                .size(11.0)
+                                                                .color(muted),
+                                                        );
+                                                    });
+                                                    if partially_selected {
+                                                        ui.label(
+                                                            RichText::new("Partially selected")
+                                                                .size(10.0)
+                                                                .color(warning),
+                                                        );
+                                                    }
+                                                });
+
                                                 ui.with_layout(
                                                     egui::Layout::right_to_left(Align::Center),
                                                     |ui| {
                                                         if blocked_count > 0 {
-                                                            ui.label(
-                                                                RichText::new(format!(
-                                                                    "{} Blocked",
-                                                                    blocked_count
-                                                                ))
-                                                                .size(12.0)
-                                                                .strong()
-                                                                .color(danger),
+                                                            status_badge(
+                                                                ui,
+                                                                &format!("{} blocked", blocked_count),
+                                                                danger,
                                                             );
                                                         }
                                                         if selected_count > 0 {
-                                                            ui.label(
-                                                                RichText::new(format!(
-                                                                    "{} Selected",
-                                                                    selected_count
-                                                                ))
-                                                                .size(12.0)
-                                                                .strong()
-                                                                .color(accent),
+                                                            ui.add_space(5.0);
+                                                            status_badge(
+                                                                ui,
+                                                                &format!("{} selected", selected_count),
+                                                                accent,
                                                             );
                                                         }
                                                     },
                                                 );
                                             })
                                             .body(|ui| {
+                                                ui.add_space(2.0);
                                                 for pop in &group.pops {
                                                     if !self.matches_search(pop) {
                                                         continue;
                                                     }
-                                                    let is_selected = self.selected.contains(&pop.code);
-                                                    let is_blocked =
-                                                        pop.relays.iter().any(|ip| blocked_ips.contains(ip));
+                                                    let is_selected =
+                                                        self.selected.contains(&pop.code);
+                                                    let is_blocked = pop
+                                                        .relays
+                                                        .iter()
+                                                        .any(|ip| blocked_ips.contains(ip));
+
+                                                    let fill = if is_blocked {
+                                                        Color32::from_rgb(40, 29, 36)
+                                                    } else if is_selected {
+                                                        Color32::from_rgb(27, 43, 60)
+                                                    } else {
+                                                        surface_2
+                                                    };
 
                                                     egui::Frame::new()
-                                                        .fill(surface_2)
-                                                        .corner_radius(8.0)
-                                                        .inner_margin(egui::Margin::symmetric(8, 6))
+                                                        .fill(fill)
+                                                        .stroke(Stroke::new(
+                                                            1.0,
+                                                            if is_blocked {
+                                                                Color32::from_rgb(95, 49, 61)
+                                                            } else {
+                                                                border
+                                                            },
+                                                        ))
+                                                        .corner_radius(10.0)
+                                                        .inner_margin(
+                                                            egui::Margin::symmetric(9, 7),
+                                                        )
                                                         .show(ui, |ui| {
                                                             ui.horizontal(|ui| {
-                                                                ui.add_space(18.0);
+                                                                ui.add_space(14.0);
                                                                 let mut selected = is_selected;
-                                                                if ui.checkbox(&mut selected, "").changed() {
+                                                                if ui.checkbox(&mut selected, "").changed()
+                                                                {
                                                                     if selected {
-                                                                        self.selected.insert(pop.code.clone());
+                                                                        self.selected.insert(
+                                                                            pop.code.clone(),
+                                                                        );
                                                                     } else {
                                                                         self.selected.remove(&pop.code);
                                                                     }
                                                                 }
+
                                                                 ui.vertical(|ui| {
-                                                                    ui.label(
-                                                                        RichText::new(&pop.location)
-                                                                            .strong()
-                                                                            .color(text),
-                                                                    );
                                                                     ui.horizontal(|ui| {
                                                                         ui.label(
-                                                                            RichText::new(pop.code.to_uppercase())
-                                                                                .size(12.0)
+                                                                            RichText::new(&pop.location)
                                                                                 .strong()
-                                                                                .color(accent),
+                                                                                .size(13.0)
+                                                                                .color(text),
                                                                         );
+                                                                        ui.add_space(7.0);
                                                                         ui.label(
-                                                                            RichText::new(format!(
-                                                                                "{} relay(s)",
-                                                                                pop.relays.len()
-                                                                            ))
-                                                                            .size(12.0)
-                                                                            .color(muted),
+                                                                            RichText::new(
+                                                                                pop.code.to_uppercase(),
+                                                                            )
+                                                                            .size(10.0)
+                                                                            .strong()
+                                                                            .color(accent),
                                                                         );
                                                                     });
+                                                                    ui.add_space(2.0);
+                                                                    ui.label(
+                                                                        RichText::new(format!(
+                                                                            "{} relay address{}",
+                                                                            pop.relays.len(),
+                                                                            if pop.relays.len() == 1 {
+                                                                                ""
+                                                                            } else {
+                                                                                "es"
+                                                                            }
+                                                                        ))
+                                                                        .size(10.0)
+                                                                        .color(muted),
+                                                                    );
                                                                 });
+
                                                                 ui.with_layout(
                                                                     egui::Layout::right_to_left(Align::Center),
                                                                     |ui| {
                                                                         if is_blocked {
-                                                                            ui.label(
-                                                                                RichText::new("BLOCKED")
-                                                                                    .size(12.0)
-                                                                                    .strong()
-                                                                                    .color(danger),
+                                                                            status_badge(
+                                                                                ui,
+                                                                                "BLOCKED",
+                                                                                danger,
                                                                             );
                                                                         }
                                                                     },
@@ -706,19 +981,82 @@ impl eframe::App for App {
                 ui.add_space(10.0);
 
                 if let Some(error) = &self.error {
-                    ui.add_space(8.0);
                     egui::Frame::new()
-                        .fill(Color32::from_rgb(54, 24, 30))
-                        .stroke(Stroke::new(1.0, Color32::from_rgb(120, 47, 59)))
-                        .corner_radius(9.0)
-                        .inner_margin(9)
+                        .fill(Color32::from_rgb(55, 25, 32))
+                        .stroke(Stroke::new(1.0, Color32::from_rgb(124, 49, 61)))
+                        .corner_radius(11.0)
+                        .inner_margin(10)
                         .show(ui, |ui| {
-                            ui.set_width((panel_width - 18.0).max(0.0));
-                            ui.label(RichText::new(error).color(Color32::from_rgb(255, 170, 178)));
+                            ui.horizontal(|ui| {
+                                ui.label(
+                                    RichText::new("ERROR")
+                                        .strong()
+                                        .size(10.0)
+                                        .color(danger),
+                                );
+                                ui.add_space(6.0);
+                                ui.label(
+                                    RichText::new(error)
+                                        .size(11.0)
+                                        .color(Color32::from_rgb(255, 182, 190)),
+                                );
+                            });
                         });
+                    ui.add_space(8.0);
                 }
+
+                egui::Frame::new()
+                    .fill(Color32::from_rgb(14, 20, 29))
+                    .stroke(Stroke::new(1.0, border))
+                    .corner_radius(11.0)
+                    .inner_margin(9)
+                    .show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.label(
+                                RichText::new("ACTIVITY")
+                                    .strong()
+                                    .size(10.0)
+                                    .color(muted),
+                            );
+                            ui.add_space(8.0);
+                            ui.label(
+                                RichText::new(current_log)
+                                    .size(11.0)
+                                    .color(text),
+                            );
+                        });
+                    });
             });
     }
+}
+
+fn status_badge(ui: &mut egui::Ui, label: &str, accent: Color32) {
+    egui::Frame::new()
+        .fill(Color32::from_rgba_unmultiplied(
+            accent.r(),
+            accent.g(),
+            accent.b(),
+            28,
+        ))
+        .stroke(Stroke::new(
+            1.0,
+            Color32::from_rgba_unmultiplied(
+                accent.r(),
+                accent.g(),
+                accent.b(),
+                85,
+            ),
+        ))
+        .corner_radius(8.0)
+        .inner_margin(egui::Margin::symmetric(7, 3))
+        .show(ui, |ui| {
+            ui.label(
+                RichText::new(label)
+                    .strong()
+                    .size(10.0)
+                    .color(accent),
+            );
+        });
 }
 
 fn draw_app_mark(ui: &mut egui::Ui, accent: Color32) {
@@ -760,34 +1098,35 @@ fn metric_card(
     width: f32,
 ) {
     let bg = if emphasized {
-        Color32::from_rgb(24, 35, 49)
+        Color32::from_rgb(23, 33, 47)
     } else {
-        Color32::from_rgb(20, 28, 40)
+        Color32::from_rgb(17, 24, 35)
     };
+
     egui::Frame::new()
         .fill(bg)
-        .stroke(Stroke::new(1.0, Color32::from_rgb(45, 58, 76)))
-        .corner_radius(10.0)
+        .stroke(Stroke::new(1.0, Color32::from_rgb(39, 51, 69)))
+        .corner_radius(11.0)
         .inner_margin(10)
         .show(ui, |ui| {
-            ui.set_width((width - 20.0).max(0.0));
-            ui.set_min_height(48.0);
+            ui.set_width((width - 8.0).max(0.0));
             ui.with_layout(egui::Layout::left_to_right(Align::Center), |ui| {
-                let (dot, _) = ui.allocate_exact_size(egui::vec2(5.0, 36.0), Sense::hover());
+                let (dot, _) = ui.allocate_exact_size(egui::vec2(5.0, 34.0), Sense::hover());
                 ui.painter().rect_filled(dot, 3.0, accent);
-                ui.add_space(3.0);
+                ui.add_space(8.0);
                 ui.vertical(|ui| {
                     ui.label(
                         RichText::new(title)
-                            .size(12.0)
+                            .size(9.0)
                             .strong()
-                            .color(Color32::from_rgb(133, 148, 169)),
+                            .color(Color32::from_rgb(125, 142, 163)),
                     );
+                    ui.add_space(1.0);
                     ui.label(
                         RichText::new(value)
-                            .size(18.0)
+                            .size(if value.len() > 22 { 13.0 } else { 16.0 })
                             .strong()
-                            .color(Color32::from_rgb(235, 241, 249)),
+                            .color(Color32::from_rgb(237, 242, 248)),
                     );
                 });
             });
@@ -1584,7 +1923,7 @@ fn flag_malaysia(p: &egui::Painter, r: Rect) {
 
 fn fetch_pops() -> Result<Vec<Pop>, String> {
     let client = Client::builder()
-        .user_agent("cs2-server-blocker/0.3.0")
+        .user_agent(format!("CS2-Server-Blocker/{}", env!("CARGO_PKG_VERSION")))
         .build()
         .map_err(|e| format!("HTTP client error: {e}"))?;
 
@@ -2132,6 +2471,158 @@ fn append_backend_cleanup(commands: &mut Vec<String>, backend: FirewallBackend) 
     }
 }
 
+fn format_version(version: AppVersion) -> String {
+    format!("{}.{}.{}", version.major, version.minor, version.patch)
+}
+
+fn check_for_updates_and_install() -> Result<UpdateOutcome, String> {
+    if env::consts::OS != "linux" {
+        return Err("In-app updates are currently supported on Linux only.".into());
+    }
+
+    if env::consts::ARCH != "x86_64" {
+        return Err("In-app updates are currently supported on x86_64 Linux only.".into());
+    }
+
+    let current = AppVersion::parse(env!("CARGO_PKG_VERSION"))
+        .ok_or_else(|| "The current app version is invalid.".to_string())?;
+
+    let client = Client::builder()
+        .user_agent(format!("CS2-Server-Blocker/{}", env!("CARGO_PKG_VERSION")))
+        .build()
+        .map_err(|err| format!("Failed to create update client: {err}"))?;
+
+    let release = client
+        .get(GITHUB_LATEST_RELEASE_URL)
+        .send()
+        .map_err(|err| format!("Failed to check GitHub for updates: {err}"))?
+        .error_for_status()
+        .map_err(|err| format!("GitHub update check failed: {err}"))?
+        .json::<GithubRelease>()
+        .map_err(|err| format!("Failed to parse the latest GitHub release: {err}"))?;
+
+    let latest = AppVersion::parse(&release.tag_name).ok_or_else(|| {
+        format!(
+            "GitHub returned an invalid release tag: {}",
+            release.tag_name
+        )
+    })?;
+
+    if latest <= current {
+        return Ok(UpdateOutcome::UpToDate { version: current });
+    }
+
+    let asset = release
+        .assets
+        .iter()
+        .find(|asset| asset.name == LINUX_RELEASE_ASSET)
+        .ok_or_else(|| {
+            format!(
+                "Latest release {} has no Linux x86_64 package.",
+                release.tag_name
+            )
+        })?;
+
+    install_release_package(&client, &asset.browser_download_url)?;
+
+    Ok(UpdateOutcome::Updated { version: latest })
+}
+
+fn install_release_package(client: &Client, asset_url: &str) -> Result<(), String> {
+    let update_dir = env::temp_dir().join(format!(
+        "cs2-server-blocker-update-{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|_| "System clock is before UNIX epoch.")?
+            .as_nanos()
+    ));
+
+    fs::create_dir_all(&update_dir)
+        .map_err(|err| format!("Failed to create update directory: {err}"))?;
+
+    let result = (|| {
+        let archive = update_dir.join(LINUX_RELEASE_ASSET);
+        let binary = update_dir.join("cs2-server-blocker");
+        let desktop = update_dir.join("cs2-server-blocker.desktop");
+        let icon = update_dir.join("cs2-server-blocker.svg");
+        let script = update_dir.join("install-update.sh");
+
+        let bytes = client
+            .get(asset_url)
+            .send()
+            .map_err(|err| format!("Failed to download the latest release: {err}"))?
+            .error_for_status()
+            .map_err(|err| format!("Release download failed: {err}"))?
+            .bytes()
+            .map_err(|err| format!("Failed to read the release package: {err}"))?;
+
+        fs::write(&archive, &bytes)
+            .map_err(|err| format!("Failed to save the release package: {err}"))?;
+
+        let status = Command::new("tar")
+            .args(["-xzf"])
+            .arg(&archive)
+            .arg("-C")
+            .arg(&update_dir)
+            .status()
+            .map_err(|err| format!("Failed to extract the release package: {err}"))?;
+
+        if !status.success() {
+            return Err("Failed to extract the latest release package.".into());
+        }
+
+        for path in [&binary, &desktop, &icon] {
+            if !path.is_file() {
+                return Err(format!(
+                    "The downloaded release package is missing {}.",
+                    path.file_name()
+                        .and_then(|name| name.to_str())
+                        .unwrap_or("a required file")
+                ));
+            }
+        }
+
+        let script_body = format!(
+            "#!/bin/sh
+set -eu
+install -Dm755 {} {}
+install -Dm644 {} {}
+install -Dm644 {} {}
+if command -v update-desktop-database >/dev/null 2>&1; then
+    update-desktop-database /usr/share/applications >/dev/null 2>&1 || true
+fi
+",
+            shell_quote(binary.to_string_lossy().as_ref()),
+            shell_quote(INSTALLED_BINARY),
+            shell_quote(desktop.to_string_lossy().as_ref()),
+            shell_quote(INSTALLED_DESKTOP_ENTRY),
+            shell_quote(icon.to_string_lossy().as_ref()),
+            shell_quote(INSTALLED_ICON),
+        );
+
+        fs::write(&script, script_body)
+            .map_err(|err| format!("Failed to prepare the installer: {err}"))?;
+
+        let status = Command::new("pkexec")
+            .arg("sh")
+            .arg(&script)
+            .status()
+            .map_err(|err| format!("Failed to start the privileged updater: {err}"))?;
+
+        if !status.success() {
+            return Err(
+                "Update installation was cancelled or failed. Root privileges are required.".into(),
+            );
+        }
+
+        Ok(())
+    })();
+
+    let _ = fs::remove_dir_all(&update_dir);
+    result
+}
+
 fn perform_action(
     task: ActionTask,
     mut stored: StoredState,
@@ -2316,4 +2807,37 @@ fn main() -> eframe::Result {
         options,
         Box::new(|cc| Ok(Box::new(App::new(cc)))),
     )
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_release_versions() {
+        assert_eq!(
+            AppVersion::parse("v1.2.3"),
+            Some(AppVersion {
+                major: 1,
+                minor: 2,
+                patch: 3
+            })
+        );
+        assert_eq!(
+            AppVersion::parse("1.2.3-beta"),
+            Some(AppVersion {
+                major: 1,
+                minor: 2,
+                patch: 3
+            })
+        );
+        assert_eq!(AppVersion::parse("1.2"), None);
+    }
+
+    #[test]
+    fn compares_release_versions() {
+        let current = AppVersion::parse("1.0.1").unwrap();
+        let newer = AppVersion::parse("1.0.2").unwrap();
+        assert!(newer > current);
+        assert!(current <= current);
+    }
 }
