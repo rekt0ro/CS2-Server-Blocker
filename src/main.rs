@@ -335,7 +335,7 @@ impl eframe::App for App {
         egui::Frame::new()
             .fill(bg)
             .inner_margin(16)
-            .outer_margin(egui::Margin::symmetric(side_margin, 0.0))
+            .outer_margin(egui::MarginF32::symmetric(side_margin, 0.0))
             .show(ui, |ui| {
                 // Header card
                 egui::Frame::new()
