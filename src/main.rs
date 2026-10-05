@@ -387,54 +387,59 @@ impl eframe::App for App {
                     egui::vec2(panel_width, 68.0),
                     egui::Layout::left_to_right(Align::Center),
                     |ui| {
-                    let card_spacing = ui.spacing().item_spacing.x + 1.0;
-                    ui.spacing_mut().item_spacing.x = card_spacing;
-                    let card_width = ((panel_width - card_spacing * 4.0) / 5.0).max(0.0);
+                        ui.columns(5, |columns| {
+                            let width = columns[0].available_width();
+                            metric_card(
+                                &mut columns[0],
+                                "FIREWALL",
+                                self.backend.map(|b| b.label()).unwrap_or("Not detected"),
+                                self.backend.is_some(),
+                                success,
+                                width,
+                            );
 
-                    metric_card(
-                        ui,
-                        "FIREWALL",
-                        self.backend.map(|b| b.label()).unwrap_or("Not detected"),
-                        self.backend.is_some(),
-                        success,
-                        card_width,
-                    );
-                    metric_card(
-                        ui,
-                        "SELECTED",
-                        self.selected.len().to_string().as_str(),
-                        !self.selected.is_empty(),
-                        accent,
-                        card_width,
-                    );
-                    metric_card(
-                        ui,
-                        "BLOCKED IPS",
-                        self.stored.blocked_ips().len().to_string().as_str(),
-                        !self.stored.blocked_ips().is_empty(),
-                        danger,
-                        card_width,
-                    );
-                    metric_card(
-                        ui,
-                        "COUNTRIES",
-                        self.country_count().to_string().as_str(),
-                        true,
-                        accent,
-                        card_width,
-                    );
-                    metric_card(
-                        ui,
-                        "POPS",
-                        self.pops.len().to_string().as_str(),
-                        true,
-                        accent,
-                        card_width,
-                    );
+                            let width = columns[1].available_width();
+                            metric_card(
+                                &mut columns[1],
+                                "SELECTED",
+                                self.selected.len().to_string().as_str(),
+                                !self.selected.is_empty(),
+                                accent,
+                                width,
+                            );
+
+                            let width = columns[2].available_width();
+                            metric_card(
+                                &mut columns[2],
+                                "BLOCKED IPS",
+                                self.stored.blocked_ips().len().to_string().as_str(),
+                                !self.stored.blocked_ips().is_empty(),
+                                danger,
+                                width,
+                            );
+
+                            let width = columns[3].available_width();
+                            metric_card(
+                                &mut columns[3],
+                                "COUNTRIES",
+                                self.country_count().to_string().as_str(),
+                                true,
+                                accent,
+                                width,
+                            );
+
+                            let width = columns[4].available_width();
+                            metric_card(
+                                &mut columns[4],
+                                "POPS",
+                                self.pops.len().to_string().as_str(),
+                                true,
+                                accent,
+                                width,
+                            );
+                        });
                     },
                 );
-
-                ui.add_space(10.0);
 
                 // Toolbar
                 egui::Frame::new()
@@ -699,37 +704,6 @@ impl eframe::App for App {
                     });
 
                 ui.add_space(10.0);
-
-                // Activity card
-                egui::Frame::new()
-                    .fill(surface)
-                    .stroke(Stroke::new(1.0, border))
-                    .corner_radius(12.0)
-                    .inner_margin(10)
-                    .show(ui, |ui| {
-                        ui.set_width((panel_width - 20.0).max(0.0));
-                        ui.horizontal(|ui| {
-                            ui.label(RichText::new("ACTIVITY").strong().color(muted).size(11.0));
-                            ui.with_layout(
-                                egui::Layout::right_to_left(Align::Center),
-                                |ui| {
-                                    if self.busy {
-                                        ui.spinner();
-                                        ui.label(RichText::new("Working").color(muted).small());
-                                    }
-                                },
-                            );
-                        });
-                        ui.add_space(5.0);
-                        ScrollArea::vertical()
-                            .stick_to_bottom(true)
-                            .max_height(108.0)
-                            .show(ui, |ui| {
-                                for line in self.log.iter().rev().take(20).rev() {
-                                    ui.label(RichText::new(line).small().color(text));
-                                }
-                            });
-                    });
 
                 if let Some(error) = &self.error {
                     ui.add_space(8.0);
