@@ -7,8 +7,9 @@ use std::env;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
-use std::time::{SystemTime, UNIX_EPOCH};
 use std::sync::mpsc::{self, Receiver};
+use std::thread;
+use std::time::{SystemTime, UNIX_EPOCH};
 use std::thread;
 
 const SDR_URL: &str = "https://api.steampowered.com/ISteamApps/GetSDRConfig/v1/?appid=730";
@@ -19,10 +20,8 @@ const GITHUB_LATEST_RELEASE_URL: &str =
     "https://api.github.com/repos/rekt0ro/CS2-Server-Blocker/releases/latest";
 const LINUX_RELEASE_ASSET: &str = "cs2-server-blocker-x86_64-linux.tar.gz";
 const INSTALLED_BINARY: &str = "/usr/local/bin/cs2-server-blocker";
-const INSTALLED_DESKTOP_ENTRY: &str =
-    "/usr/share/applications/cs2-server-blocker.desktop";
-const INSTALLED_ICON: &str =
-    "/usr/share/icons/hicolor/scalable/apps/cs2-server-blocker.svg";
+const INSTALLED_DESKTOP_ENTRY: &str = "/usr/share/applications/cs2-server-blocker.desktop";
+const INSTALLED_ICON: &str = "/usr/share/icons/hicolor/scalable/apps/cs2-server-blocker.svg";
 
 #[derive(Clone, Debug)]
 struct Pop {
@@ -260,8 +259,10 @@ impl App {
             },
             WorkerResult::Updated(result) => match result {
                 Ok(UpdateOutcome::UpToDate { version }) => {
-                    self.log
-                        .push(format!("You're already on the latest version, v{}. ", format_version(version)));
+                    self.log.push(format!(
+                        "You're already on the latest version, v{}. ",
+                        format_version(version)
+                    ));
                 }
                 Ok(UpdateOutcome::Updated { version }) => {
                     self.log.push(format!(
@@ -2277,8 +2278,12 @@ fn check_for_updates_and_install() -> Result<UpdateOutcome, String> {
         .json::<GithubRelease>()
         .map_err(|err| format!("Failed to parse the latest GitHub release: {err}"))?;
 
-    let latest = AppVersion::parse(&release.tag_name)
-        .ok_or_else(|| format!("GitHub returned an invalid release tag: {}", release.tag_name))?;
+    let latest = AppVersion::parse(&release.tag_name).ok_or_else(|| {
+        format!(
+            "GitHub returned an invalid release tag: {}",
+            release.tag_name
+        )
+    })?;
 
     if latest <= current {
         return Ok(UpdateOutcome::UpToDate { version: current });
@@ -2288,7 +2293,12 @@ fn check_for_updates_and_install() -> Result<UpdateOutcome, String> {
         .assets
         .iter()
         .find(|asset| asset.name == LINUX_RELEASE_ASSET)
-        .ok_or_else(|| format!("Latest release {} has no Linux x86_64 package.", release.tag_name))?;
+        .ok_or_else(|| {
+            format!(
+                "Latest release {} has no Linux x86_64 package.",
+                release.tag_name
+            )
+        })?;
 
     install_release_package(&client, &asset.browser_download_url)?;
 
@@ -2379,8 +2389,7 @@ fi
 
         if !status.success() {
             return Err(
-                "Update installation was cancelled or failed. Root privileges are required."
-                    .into(),
+                "Update installation was cancelled or failed. Root privileges are required.".into(),
             );
         }
 
