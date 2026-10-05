@@ -2570,6 +2570,20 @@ fn perform_action(
     }
 }
 
+fn main() -> eframe::Result {
+    let options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default()
+            .with_inner_size([800.0, 700.0])
+            .with_min_inner_size([800.0, 700.0]),
+        ..Default::default()
+    };
+
+    eframe::run_native(
+        "CS2 Server Blocker",
+        options,
+        Box::new(|cc| Ok(Box::new(App::new(cc)))),
+    )
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2604,17 +2618,3 @@ mod tests {
     }
 }
 
-fn main() -> eframe::Result {
-    let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_inner_size([800.0, 700.0])
-            .with_min_inner_size([800.0, 700.0]),
-        ..Default::default()
-    };
-
-    eframe::run_native(
-        "CS2 Server Blocker",
-        options,
-        Box::new(|cc| Ok(Box::new(App::new(cc)))),
-    )
-}
