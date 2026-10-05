@@ -804,7 +804,7 @@ impl eframe::App for App {
 
                 ui.add_space(9.0);
 
-                let list_height = (ui.available_height() - 12.0).max(220.0);
+                let list_height = ui.available_height().clamp(280.0, 390.0);
 
                 egui::Frame::new()
                     .fill(surface)
@@ -1128,30 +1128,6 @@ impl eframe::App for App {
                         }
                     });
 
-                if self.error.is_some() {
-                    ui.add_space(7.0);
-                    egui::Frame::new()
-                        .fill(Color32::from_rgb(47, 23, 29))
-                        .stroke(Stroke::new(1.0, Color32::from_rgb(105, 46, 58)))
-                        .corner_radius(10.0)
-                        .inner_margin(8)
-                        .show(ui, |ui| {
-                            ui.horizontal(|ui| {
-                                ui.label(
-                                    RichText::new("UPDATE")
-                                        .strong()
-                                        .size(9.0)
-                                        .color(danger),
-                                );
-                                ui.add_space(7.0);
-                                ui.label(
-                                    RichText::new(self.error.as_deref().unwrap_or(""))
-                                        .size(10.0)
-                                        .color(Color32::from_rgb(255, 178, 186)),
-                                );
-                            });
-                        });
-                }
             });
     }
 }
