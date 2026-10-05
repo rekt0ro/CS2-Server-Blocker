@@ -330,14 +330,14 @@ impl eframe::App for App {
         let success = Color32::from_rgb(67, 207, 139);
         let danger = Color32::from_rgb(241, 92, 104);
 
+        let content_width = ui.available_width().min(1100.0);
+        let side_margin = ((ui.available_width() - content_width) * 0.5).max(0.0);
         egui::Frame::new()
             .fill(bg)
             .inner_margin(16)
+            .outer_margin(egui::Margin::symmetric(side_margin, 0.0))
             .show(ui, |ui| {
-                let content_width = ui.available_width().min(1100.0);
-                ui.vertical_centered(|ui| {
-                    ui.set_width(content_width);
-                    // Header card
+                // Header card
                 egui::Frame::new()
                     .fill(surface)
                     .stroke(Stroke::new(1.0, border))
@@ -732,7 +732,6 @@ impl eframe::App for App {
                         });
                 }
             });
-        });
     }
 }
 
