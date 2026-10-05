@@ -383,7 +383,10 @@ impl eframe::App for App {
                 ui.add_space(10.0);
 
                 // Metrics
-                ui.horizontal(|ui| {
+                ui.allocate_ui_with_layout(
+                    egui::vec2(panel_width, 68.0),
+                    egui::Layout::left_to_right(Align::Center),
+                    |ui| {
                     let card_spacing = ui.spacing().item_spacing.x;
                     let card_width = ((ui.available_width() - card_spacing * 4.0) / 5.0).max(0.0);
 
@@ -427,7 +430,8 @@ impl eframe::App for App {
                         accent,
                         card_width,
                     );
-                });
+                    },
+                );
 
                 ui.add_space(10.0);
 
