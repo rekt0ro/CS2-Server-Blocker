@@ -1040,22 +1040,12 @@ fn status_badge(ui: &mut egui::Ui, label: &str, accent: Color32) {
         ))
         .stroke(Stroke::new(
             1.0,
-            Color32::from_rgba_unmultiplied(
-                accent.r(),
-                accent.g(),
-                accent.b(),
-                85,
-            ),
+            Color32::from_rgba_unmultiplied(accent.r(), accent.g(), accent.b(), 85),
         ))
         .corner_radius(8.0)
         .inner_margin(egui::Margin::symmetric(7, 3))
         .show(ui, |ui| {
-            ui.label(
-                RichText::new(label)
-                    .strong()
-                    .size(10.0)
-                    .color(accent),
-            );
+            ui.label(RichText::new(label).strong().size(10.0).color(accent));
         });
 }
 
