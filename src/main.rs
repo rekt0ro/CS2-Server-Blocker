@@ -330,8 +330,9 @@ impl eframe::App for App {
         let success = Color32::from_rgb(67, 207, 139);
         let danger = Color32::from_rgb(241, 92, 104);
 
-        let content_width = ui.available_width().min(1100.0);
-        let side_margin = ((ui.available_width() - content_width) * 0.5).max(0.0);
+        let total_width = ui.available_width().min(1100.0);
+        let panel_width = (total_width - 32.0).max(0.0);
+        let side_margin = ((ui.available_width() - total_width) * 0.5).max(0.0);
         egui::Frame::new()
             .fill(bg)
             .inner_margin(16)
@@ -344,7 +345,7 @@ impl eframe::App for App {
                     .corner_radius(14.0)
                     .inner_margin(16)
                     .show(ui, |ui| {
-                        ui.set_min_width((content_width - 32.0).max(0.0));
+                        ui.set_min_width((panel_width - 32.0).max(0.0));
                         ui.horizontal(|ui| {
                             draw_app_mark(ui, accent);
                             ui.add_space(10.0);
@@ -437,7 +438,7 @@ impl eframe::App for App {
                     .corner_radius(12.0)
                     .inner_margin(10)
                     .show(ui, |ui| {
-                        ui.set_min_width((content_width - 20.0).max(0.0));
+                        ui.set_min_width((panel_width - 20.0).max(0.0));
                         ui.horizontal(|ui| {
                             ui.label(RichText::new("SERVER REGIONS").strong().color(muted).size(11.0));
                             ui.add_space(8.0);
@@ -507,7 +508,7 @@ impl eframe::App for App {
                     .corner_radius(12.0)
                     .inner_margin(10)
                     .show(ui, |ui| {
-                        ui.set_min_width((content_width - 20.0).max(0.0));
+                        ui.set_min_width((panel_width - 20.0).max(0.0));
                         let groups = self.visible_country_groups();
                         let blocked_ips = self.stored.blocked_ips();
 
@@ -701,7 +702,7 @@ impl eframe::App for App {
                     .corner_radius(12.0)
                     .inner_margin(10)
                     .show(ui, |ui| {
-                        ui.set_min_width((content_width - 20.0).max(0.0));
+                        ui.set_min_width((panel_width - 20.0).max(0.0));
                         ui.horizontal(|ui| {
                             ui.label(RichText::new("ACTIVITY").strong().color(muted).size(11.0));
                             ui.with_layout(
@@ -733,7 +734,7 @@ impl eframe::App for App {
                         .corner_radius(9.0)
                         .inner_margin(9)
                         .show(ui, |ui| {
-                            ui.set_min_width((content_width - 18.0).max(0.0));
+                            ui.set_min_width((panel_width - 18.0).max(0.0));
                             ui.label(RichText::new(error).color(Color32::from_rgb(255, 170, 178)));
                         });
                 }
