@@ -6,12 +6,9 @@ A native Linux GUI for blocking Counter-Strike 2 Steam SDR relay regions.
 
 ## Install
 
-Install the latest release with one command:
-
 ```bash
 curl -fsSL https://raw.githubusercontent.com/rekt0ro/CS2-Server-Blocker/main/install.sh | bash
 ```
-
 
 ### Uninstall
 
@@ -33,8 +30,6 @@ curl -fsSL https://raw.githubusercontent.com/rekt0ro/CS2-Server-Blocker/main/uni
 ## How it works
 
 CS2 Server Blocker fetches the current Steam SDR relay configuration, maps relay PoPs to regions, and applies UDP firewall rules for the regions you select.
-
-Firewall changes require elevated privileges. The application uses `pkexec` when needed.
 
 ## Build from source
 
