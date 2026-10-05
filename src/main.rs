@@ -334,6 +334,14 @@ impl eframe::App for App {
             .fill(bg)
             .inner_margin(16)
             .show(ui, |ui| {
+                let content_width = ui.available_width().min(1100.0);
+                ui.horizontal(|ui| {
+                    let side_margin = ((ui.available_width() - content_width) * 0.5).max(0.0);
+                    ui.add_space(side_margin);
+                    ui.allocate_ui_with_layout(
+                        egui::vec2(content_width, ui.available_height()),
+                        egui::Layout::top_down(Align::Min),
+                        |ui| {
                 // Header card
                 egui::Frame::new()
                     .fill(surface)
@@ -379,11 +387,8 @@ impl eframe::App for App {
 
                 // Metrics
                 ui.horizontal(|ui| {
-                    let side_margin = 8.0;
                     let card_spacing = ui.spacing().item_spacing.x;
-                    let available = (ui.available_width() - side_margin * 2.0).max(0.0);
-                    let card_width = ((available - card_spacing * 4.0) / 5.0).max(0.0);
-                    ui.add_space(side_margin);
+                    let card_width = ((ui.available_width() - card_spacing * 4.0) / 5.0).max(0.0);
 
                     metric_card(
                         ui,
@@ -425,8 +430,6 @@ impl eframe::App for App {
                         accent,
                         card_width,
                     );
-                    ui.add_space(side_margin);
-                });
 
                 ui.add_space(10.0);
 
@@ -733,6 +736,9 @@ impl eframe::App for App {
                             ui.label(RichText::new(error).color(Color32::from_rgb(255, 170, 178)));
                         });
                 }
+                        },
+                    );
+                });
             });
     }
 }
