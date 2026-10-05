@@ -40,7 +40,7 @@ impl FirewallBackend {
     fn label(self) -> &'static str {
         match self {
             Self::Ufw => "UFW",
-            Self::Firewalld => "firewalld",
+            Self::Firewalld => "Firewalld",
             Self::Nftables => "nftables",
             Self::Iptables => "iptables",
         }
@@ -377,13 +377,17 @@ impl eframe::App for App {
                 ui.add_space(10.0);
 
                 // Metrics
-                ui.horizontal_wrapped(|ui| {
+                ui.horizontal(|ui| {
+                    let card_spacing = ui.spacing().item_spacing.x;
+                    let card_width = ((ui.available_width() - card_spacing * 4.0) / 5.0).max(0.0);
+
                     metric_card(
                         ui,
                         "FIREWALL",
                         self.backend.map(|b| b.label()).unwrap_or("Not detected"),
                         self.backend.is_some(),
                         success,
+                        card_width,
                     );
                     metric_card(
                         ui,
@@ -391,6 +395,7 @@ impl eframe::App for App {
                         self.selected.len().to_string().as_str(),
                         !self.selected.is_empty(),
                         accent,
+                        card_width,
                     );
                     metric_card(
                         ui,
@@ -398,6 +403,7 @@ impl eframe::App for App {
                         self.stored.blocked_ips().len().to_string().as_str(),
                         !self.stored.blocked_ips().is_empty(),
                         danger,
+                        card_width,
                     );
                     metric_card(
                         ui,
@@ -405,6 +411,7 @@ impl eframe::App for App {
                         self.country_count().to_string().as_str(),
                         true,
                         accent,
+                        card_width,
                     );
                     metric_card(
                         ui,
@@ -412,6 +419,7 @@ impl eframe::App for App {
                         self.pops.len().to_string().as_str(),
                         true,
                         accent,
+                        card_width,
                     );
                 });
 
@@ -584,7 +592,8 @@ impl eframe::App for App {
                                                                     "{} blocked",
                                                                     blocked_count
                                                                 ))
-                                                                .small()
+                                                                .size(12.0)
+                                                                .strong()
                                                                 .color(danger),
                                                             );
                                                         }
@@ -594,7 +603,8 @@ impl eframe::App for App {
                                                                     "{} selected",
                                                                     selected_count
                                                                 ))
-                                                                .small()
+                                                                .size(12.0)
+                                                                .strong()
                                                                 .color(accent),
                                                             );
                                                         }
@@ -634,7 +644,7 @@ impl eframe::App for App {
                                                                     ui.horizontal(|ui| {
                                                                         ui.label(
                                                                             RichText::new(pop.code.to_uppercase())
-                                                                                .small()
+                                                                                .size(12.0)
                                                                                 .strong()
                                                                                 .color(accent),
                                                                         );
@@ -643,7 +653,7 @@ impl eframe::App for App {
                                                                                 "{} relay(s)",
                                                                                 pop.relays.len()
                                                                             ))
-                                                                            .small()
+                                                                            .size(12.0)
                                                                             .color(muted),
                                                                         );
                                                                     });
@@ -654,7 +664,7 @@ impl eframe::App for App {
                                                                         if is_blocked {
                                                                             ui.label(
                                                                                 RichText::new("BLOCKED")
-                                                                                    .small()
+                                                                                    .size(12.0)
                                                                                     .strong()
                                                                                     .color(danger),
                                                                             );
@@ -752,7 +762,14 @@ fn draw_app_mark(ui: &mut egui::Ui, accent: Color32) {
     );
 }
 
-fn metric_card(ui: &mut egui::Ui, title: &str, value: &str, emphasized: bool, accent: Color32) {
+fn metric_card(
+    ui: &mut egui::Ui,
+    title: &str,
+    value: &str,
+    emphasized: bool,
+    accent: Color32,
+    width: f32,
+) {
     let bg = if emphasized {
         Color32::from_rgb(24, 35, 49)
     } else {
@@ -764,6 +781,7 @@ fn metric_card(ui: &mut egui::Ui, title: &str, value: &str, emphasized: bool, ac
         .corner_radius(10.0)
         .inner_margin(10)
         .show(ui, |ui| {
+            ui.set_min_width((width - 20.0).max(0.0));
             ui.horizontal(|ui| {
                 let (dot, _) = ui.allocate_exact_size(egui::vec2(5.0, 28.0), Sense::hover());
                 ui.painter().rect_filled(dot, 3.0, accent);
@@ -771,12 +789,13 @@ fn metric_card(ui: &mut egui::Ui, title: &str, value: &str, emphasized: bool, ac
                 ui.vertical(|ui| {
                     ui.label(
                         RichText::new(title)
-                            .small()
+                            .size(12.0)
                             .strong()
                             .color(Color32::from_rgb(133, 148, 169)),
                     );
                     ui.label(
                         RichText::new(value)
+                            .size(18.0)
                             .strong()
                             .color(Color32::from_rgb(235, 241, 249)),
                     );
