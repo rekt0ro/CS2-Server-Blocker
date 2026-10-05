@@ -335,14 +335,9 @@ impl eframe::App for App {
             .inner_margin(16)
             .show(ui, |ui| {
                 let content_width = ui.available_width().min(1100.0);
-                ui.horizontal(|ui| {
-                    let side_margin = ((ui.available_width() - content_width) * 0.5).max(0.0);
-                    ui.add_space(side_margin);
-                    ui.allocate_ui_with_layout(
-                        egui::vec2(content_width, ui.available_height()),
-                        egui::Layout::top_down(Align::Min),
-                        |ui| {
-                // Header card
+                ui.vertical_centered(|ui| {
+                    ui.set_width(content_width);
+                    // Header card
                 egui::Frame::new()
                     .fill(surface)
                     .stroke(Stroke::new(1.0, border))
@@ -736,9 +731,6 @@ impl eframe::App for App {
                             ui.label(RichText::new(error).color(Color32::from_rgb(255, 170, 178)));
                         });
                 }
-                        },
-                    );
-                });
             });
     }
 }
