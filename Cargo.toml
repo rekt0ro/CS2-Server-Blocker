@@ -1,6 +1,6 @@
 [package]
 name = "cs2-server-blocker-gui"
-version = "0.3.0"
+version = "1.0.1"
 edition = "2024"
 license = "MIT"
 description = "Native Linux GUI for blocking Counter-Strike 2 Steam SDR relay PoPs."
