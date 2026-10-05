@@ -425,6 +425,7 @@ impl eframe::App for App {
                         accent,
                         card_width,
                     );
+                });
 
                 ui.add_space(10.0);
 
