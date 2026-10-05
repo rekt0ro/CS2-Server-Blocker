@@ -458,23 +458,24 @@ impl eframe::App for App {
                                 egui::Layout::right_to_left(Align::Center),
                                 |ui| {
                                     ui.add_enabled_ui(!self.busy, |ui| {
-                                        if ui
-                                            .add(egui::Button::new(
-                                                RichText::new("Check for Updates").strong(),
-                                            ))
-                                            .clicked()
-                                        {
-                                            self.start_update_check();
-                                        }
-                                        ui.add_space(6.0);
-                                        if ui
-                                            .add(egui::Button::new(
-                                                RichText::new("Refresh Data").strong(),
-                                            ))
-                                            .clicked()
-                                        {
-                                            self.start_refresh();
-                                        }
+                                        ui.vertical(|ui| {
+                                            if ui
+                                                .add(egui::Button::new(
+                                                    RichText::new("Refresh Data").strong(),
+                                                ))
+                                                .clicked()
+                                            {
+                                                self.start_refresh();
+                                            }
+                                            if ui
+                                                .add(egui::Button::new(
+                                                    RichText::new("Check for Updates").strong(),
+                                                ))
+                                                .clicked()
+                                            {
+                                                self.start_update_check();
+                                            }
+                                        });
                                     });
                                 },
                             );
