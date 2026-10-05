@@ -2,7 +2,7 @@
 
 A native Linux GUI for blocking Counter-Strike 2 Steam SDR relay regions.
 
-![CS2 Server Blocker screenshot](docs/screenshot.png)
+![CS2 Server Blocker screenshot](docs/screenshot.png?v=1.0.1)
 
 ## Install
 
