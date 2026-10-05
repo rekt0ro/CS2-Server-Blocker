@@ -3,24 +3,16 @@ use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::env;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::mpsc::{self, Receiver};
 use std::thread;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 const SDR_URL: &str = "https://api.steampowered.com/ISteamApps/GetSDRConfig/v1/?appid=730";
 const STATE_FILE: &str = "state.json";
 const UFW_COMMENT: &str = "CS2-Server-Blocker";
 const FIREWALL_COMMENT: &str = "CS2-Server-Blocker";
-const GITHUB_LATEST_RELEASE_URL: &str =
-    "https://api.github.com/repos/rekt0ro/CS2-Server-Blocker/releases/latest";
-const LINUX_RELEASE_ASSET: &str = "cs2-server-blocker-x86_64-linux.tar.gz";
-const INSTALLED_BINARY: &str = "/usr/local/bin/cs2-server-blocker";
-const INSTALLED_DESKTOP_ENTRY: &str = "/usr/share/applications/cs2-server-blocker.desktop";
-const INSTALLED_ICON: &str = "/usr/share/icons/hicolor/scalable/apps/cs2-server-blocker.svg";
 
 #[derive(Clone, Debug)]
 struct Pop {
@@ -79,7 +71,6 @@ impl StoredState {
 
 enum WorkerResult {
     Refreshed(Result<Vec<Pop>, String>),
-    Updated(Result<UpdateOutcome, String>),
     FirewallAction(Result<ActionReport, String>),
 }
 
@@ -89,51 +80,6 @@ struct ActionReport {
     pop_count: usize,
     ip_count: usize,
     backend: FirewallBackend,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-struct GithubRelease {
-    tag_name: String,
-    assets: Vec<GithubReleaseAsset>,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-struct GithubReleaseAsset {
-    name: String,
-    browser_download_url: String,
-}
-
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-struct AppVersion {
-    major: u64,
-    minor: u64,
-    patch: u64,
-}
-
-impl AppVersion {
-    fn parse(value: &str) -> Option<Self> {
-        let version = value.trim().strip_prefix('v').unwrap_or(value.trim());
-        let mut parts = version.split('.');
-        let major = parts.next()?.parse().ok()?;
-        let minor = parts.next()?.parse().ok()?;
-        let patch = parts.next()?.split(['-', '+']).next()?.parse().ok()?;
-
-        if parts.next().is_some() {
-            return None;
-        }
-
-        Some(Self {
-            major,
-            minor,
-            patch,
-        })
-    }
-}
-
-#[derive(Debug)]
-enum UpdateOutcome {
-    UpToDate { version: AppVersion },
-    Updated { version: AppVersion },
 }
 
 #[derive(Default)]
@@ -205,20 +151,6 @@ impl App {
         });
     }
 
-    fn start_update_check(&mut self) {
-        if self.busy {
-            return;
-        }
-        self.busy = true;
-        self.error = None;
-        let (tx, rx) = mpsc::channel();
-        self.worker_rx = Some(rx);
-        thread::spawn(move || {
-            let result = check_for_updates_and_install();
-            let _ = tx.send(WorkerResult::Updated(result));
-        });
-    }
-
     fn start_action(&mut self, task: ActionTask) {
         if self.busy {
             return;
@@ -254,24 +186,6 @@ impl App {
                 Err(err) => {
                     self.error = Some(err.clone());
                     self.log.push(format!("Refresh failed: {err}"));
-                }
-            },
-            WorkerResult::Updated(result) => match result {
-                Ok(UpdateOutcome::UpToDate { version }) => {
-                    self.log.push(format!(
-                        "You're already on the latest version, v{}. ",
-                        format_version(version)
-                    ));
-                }
-                Ok(UpdateOutcome::Updated { version }) => {
-                    self.log.push(format!(
-                        "Updated to v{}. Restart the app to use the new version.",
-                        format_version(version)
-                    ));
-                }
-                Err(err) => {
-                    self.error = Some(err.clone());
-                    self.log.push(format!("Update failed: {err}"));
                 }
             },
             WorkerResult::FirewallAction(result) => match result {
@@ -348,51 +262,25 @@ impl App {
                     || group.pops.iter().any(|pop| self.matches_search(pop))
             })
             .collect()
-
     }
-                            ui.vertical(|ui| {
-                                ui.horizontal(|ui| {
-                                    ui.label(RichText::new("CS2 Server Blocker").strong().size(20.0).color(text));
 
-                                    let version = env!("CARGO_PKG_VERSION");
-                                    ui.label(RichText::new(format!("v{}", version)).size(11.0).color(muted));
-                                });
-                                ui.label(
-                                    RichText::new("Steam SDR relay control").size(13.0).color(muted),
-                                );
-                            });
-                            ui.with_layout(
-                                egui::Layout::right_to_left(Align::Center),
-                                |ui| {
-                                    ui.add_enabled_ui(!self.busy, |ui| {
-                                        ui.vertical_centered_justified(|ui| {
-                                            if ui
-                                                .add(egui::Button::new(
-                                                    RichText::new("Refresh Data").strong(),
-                                                ))
-                                                .clicked()
-                                            {
-                                                self.start_refresh();
-                                            }
+    fn set_country_selected(&mut self, pops: &[Pop], selected: bool) {
+        for pop in pops {
+            if selected {
+                self.selected.insert(pop.code.clone());
+            } else {
+                self.selected.remove(&pop.code);
+            }
+        }
+    }
 
-                                            if ui
-                                                .add(egui::Button::new(
-                                                    RichText::new("Check for Updates").size(12.0),
-                                                ))
-                                                .clicked()
-                                            {
-                                                std::process::Command::new("sh")
-                                                    .arg("-c")
-                                                    .arg("curl -fsSL https://raw.githubusercontent.com/rekt0ro/CS2-Server-Blocker/main/install.sh | bash")
-                                                    .spawn()
-                                                    .unwrap_or_else(|e| {
-                                                        eprintln!("Failed to run update script: {}", e);
+    fn select_all(&mut self) {
+        self.selected = self.pops.iter().map(|pop| pop.code.clone()).collect();
+    }
 
-                                                        std::process::exit(1);
-                                                    });
-                                            }
-                                        });
-                                    });
+    fn unselect_all(&mut self) {
+        self.selected.clear();
+    }
 
     fn block_selected(&mut self) {
         if self.selected.is_empty() {
@@ -450,7 +338,6 @@ impl eframe::App for App {
             .inner_margin(16)
             .outer_margin(egui::vec2(side_margin, 0.0))
             .show(ui, |ui| {
-                // Header card
                 egui::Frame::new()
                     .fill(surface)
                     .stroke(Stroke::new(1.0, border))
@@ -462,20 +349,7 @@ impl eframe::App for App {
                             draw_app_mark(ui, accent);
                             ui.add_space(10.0);
                             ui.vertical(|ui| {
-                                ui.horizontal(|ui| {
-                                    ui.label(
-                                        RichText::new("CS2 Server Blocker")
-                                            .strong()
-                                            .size(20.0)
-                                            .color(text),
-                                    );
-                                    ui.add_space(6.0);
-                                    ui.label(
-                                        RichText::new(format!("v{}", env!("CARGO_PKG_VERSION")))
-                                            .size(11.0)
-                                            .color(muted),
-                                    );
-                                });
+                                ui.label(RichText::new("CS2 Server Blocker").strong().size(20.0).color(text));
                                 ui.label(
                                     RichText::new("Steam SDR relay control").size(13.0).color(muted),
                                 );
@@ -484,33 +358,14 @@ impl eframe::App for App {
                                 egui::Layout::right_to_left(Align::Center),
                                 |ui| {
                                     ui.add_enabled_ui(!self.busy, |ui| {
-                                        ui.vertical(|ui| {
-                                            if ui
-                                                .add_sized(
-                                                    egui::vec2(150.0, 26.0),
-                                                    egui::Button::new(
-                                                        RichText::new("Refresh Data").strong().size(12.0),
-                                                    ),
-                                                )
-                                                .clicked()
-                                            {
-                                                self.start_refresh();
-                                            }
-                                            ui.add_space(4.0);
-                                            if ui
-                                                .add_sized(
-                                                    egui::vec2(150.0, 26.0),
-                                                    egui::Button::new(
-                                                        RichText::new("Check for Updates")
-                                                            .strong()
-                                                            .size(12.0),
-                                                    ),
-                                                )
-                                                .clicked()
-                                            {
-                                                self.start_update_check();
-                                            }
-                                        });
+                                        if ui
+                                            .add(egui::Button::new(
+                                                RichText::new("Refresh Data").strong(),
+                                            ))
+                                            .clicked()
+                                        {
+                                            self.start_refresh();
+                                        }
                                     });
                                 },
                             );
@@ -526,7 +381,6 @@ impl eframe::App for App {
 
                 ui.add_space(10.0);
 
-                // Metrics
                 ui.allocate_ui_with_layout(
                     egui::vec2(panel_width, 68.0),
                     egui::Layout::left_to_right(Align::Center),
@@ -585,7 +439,6 @@ impl eframe::App for App {
                     },
                 );
 
-                // Toolbar
                 egui::Frame::new()
                     .fill(surface)
                     .stroke(Stroke::new(1.0, border))
@@ -655,7 +508,6 @@ impl eframe::App for App {
 
                 ui.add_space(10.0);
 
-                // Country tree card
                 egui::Frame::new()
                     .fill(surface)
                     .stroke(Stroke::new(1.0, border))
@@ -2276,158 +2128,6 @@ fn append_backend_cleanup(commands: &mut Vec<String>, backend: FirewallBackend) 
     }
 }
 
-fn format_version(version: AppVersion) -> String {
-    format!("{}.{}.{}", version.major, version.minor, version.patch)
-}
-
-fn check_for_updates_and_install() -> Result<UpdateOutcome, String> {
-    if env::consts::OS != "linux" {
-        return Err("In-app updates are currently supported on Linux only.".into());
-    }
-
-    if env::consts::ARCH != "x86_64" {
-        return Err("In-app updates are currently supported on x86_64 Linux only.".into());
-    }
-
-    let current = AppVersion::parse(env!("CARGO_PKG_VERSION"))
-        .ok_or_else(|| "The current app version is invalid.".to_string())?;
-
-    let client = Client::builder()
-        .user_agent(format!("CS2-Server-Blocker/{}", env!("CARGO_PKG_VERSION")))
-        .build()
-        .map_err(|err| format!("Failed to create update client: {err}"))?;
-
-    let release = client
-        .get(GITHUB_LATEST_RELEASE_URL)
-        .send()
-        .map_err(|err| format!("Failed to check GitHub for updates: {err}"))?
-        .error_for_status()
-        .map_err(|err| format!("GitHub update check failed: {err}"))?
-        .json::<GithubRelease>()
-        .map_err(|err| format!("Failed to parse the latest GitHub release: {err}"))?;
-
-    let latest = AppVersion::parse(&release.tag_name).ok_or_else(|| {
-        format!(
-            "GitHub returned an invalid release tag: {}",
-            release.tag_name
-        )
-    })?;
-
-    if latest <= current {
-        return Ok(UpdateOutcome::UpToDate { version: current });
-    }
-
-    let asset = release
-        .assets
-        .iter()
-        .find(|asset| asset.name == LINUX_RELEASE_ASSET)
-        .ok_or_else(|| {
-            format!(
-                "Latest release {} has no Linux x86_64 package.",
-                release.tag_name
-            )
-        })?;
-
-    install_release_package(&client, &asset.browser_download_url)?;
-
-    Ok(UpdateOutcome::Updated { version: latest })
-}
-
-fn install_release_package(client: &Client, asset_url: &str) -> Result<(), String> {
-    let update_dir = env::temp_dir().join(format!(
-        "cs2-server-blocker-update-{}-{}",
-        std::process::id(),
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_err(|_| "System clock is before UNIX epoch.")?
-            .as_nanos()
-    ));
-
-    fs::create_dir_all(&update_dir)
-        .map_err(|err| format!("Failed to create update directory: {err}"))?;
-
-    let result = (|| {
-        let archive = update_dir.join(LINUX_RELEASE_ASSET);
-        let binary = update_dir.join("cs2-server-blocker");
-        let desktop = update_dir.join("cs2-server-blocker.desktop");
-        let icon = update_dir.join("cs2-server-blocker.svg");
-        let script = update_dir.join("install-update.sh");
-
-        let bytes = client
-            .get(asset_url)
-            .send()
-            .map_err(|err| format!("Failed to download the latest release: {err}"))?
-            .error_for_status()
-            .map_err(|err| format!("Release download failed: {err}"))?
-            .bytes()
-            .map_err(|err| format!("Failed to read the release package: {err}"))?;
-
-        fs::write(&archive, &bytes)
-            .map_err(|err| format!("Failed to save the release package: {err}"))?;
-
-        let status = Command::new("tar")
-            .args(["-xzf"])
-            .arg(&archive)
-            .arg("-C")
-            .arg(&update_dir)
-            .status()
-            .map_err(|err| format!("Failed to extract the release package: {err}"))?;
-
-        if !status.success() {
-            return Err("Failed to extract the latest release package.".into());
-        }
-
-        for path in [&binary, &desktop, &icon] {
-            if !path.is_file() {
-                return Err(format!(
-                    "The downloaded release package is missing {}.",
-                    path.file_name()
-                        .and_then(|name| name.to_str())
-                        .unwrap_or("a required file")
-                ));
-            }
-        }
-
-        let script_body = format!(
-            "#!/bin/sh
-set -eu
-install -Dm755 {} {}
-install -Dm644 {} {}
-install -Dm644 {} {}
-if command -v update-desktop-database >/dev/null 2>&1; then
-    update-desktop-database /usr/share/applications >/dev/null 2>&1 || true
-fi
-",
-            shell_quote(binary.to_string_lossy().as_ref()),
-            shell_quote(INSTALLED_BINARY),
-            shell_quote(desktop.to_string_lossy().as_ref()),
-            shell_quote(INSTALLED_DESKTOP_ENTRY),
-            shell_quote(icon.to_string_lossy().as_ref()),
-            shell_quote(INSTALLED_ICON),
-        );
-
-        fs::write(&script, script_body)
-            .map_err(|err| format!("Failed to prepare the installer: {err}"))?;
-
-        let status = Command::new("pkexec")
-            .arg("sh")
-            .arg(&script)
-            .status()
-            .map_err(|err| format!("Failed to start the privileged updater: {err}"))?;
-
-        if !status.success() {
-            return Err(
-                "Update installation was cancelled or failed. Root privileges are required.".into(),
-            );
-        }
-
-        Ok(())
-    })();
-
-    let _ = fs::remove_dir_all(&update_dir);
-    result
-}
-
 fn perform_action(
     task: ActionTask,
     mut stored: StoredState,
@@ -2612,37 +2312,4 @@ fn main() -> eframe::Result {
         options,
         Box::new(|cc| Ok(Box::new(App::new(cc)))),
     )
-}
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parses_release_versions() {
-        assert_eq!(
-            AppVersion::parse("v1.2.3"),
-            Some(AppVersion {
-                major: 1,
-                minor: 2,
-                patch: 3
-            })
-        );
-        assert_eq!(
-            AppVersion::parse("1.2.3-beta"),
-            Some(AppVersion {
-                major: 1,
-                minor: 2,
-                patch: 3
-            })
-        );
-        assert_eq!(AppVersion::parse("1.2"), None);
-    }
-
-    #[test]
-    fn compares_release_versions() {
-        let current = AppVersion::parse("1.0.1").unwrap();
-        let newer = AppVersion::parse("1.0.2").unwrap();
-        assert!(newer > current);
-        assert!(current <= current);
-    }
 }
