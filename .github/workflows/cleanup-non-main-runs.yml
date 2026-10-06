@@ -1,0 +1,22 @@
+name: Cleanup non-main workflow runs
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  actions: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Snapshot and delete non-main runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ids="$(gh run list --limit 100 --json databaseId,headBranch --jq '.[] | select(.headBranch != "main") | .databaseId')"
+          for run_id in $ids; do
+            gh run delete "$run_id"
+          done
