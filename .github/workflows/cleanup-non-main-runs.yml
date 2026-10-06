@@ -16,7 +16,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          ids="$(gh run list --limit 100 --json databaseId,headBranch --jq '.[] | select(.headBranch != "main") | .databaseId')"
+          ids="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/runs?per_page=100" --jq '.workflow_runs[] | select(.head_branch != "main") | .id')"
           for run_id in $ids; do
-            gh run delete "$run_id"
+            gh api --method DELETE "/repos/${GITHUB_REPOSITORY}/actions/runs/$run_id"
           done
